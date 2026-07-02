@@ -1,7 +1,7 @@
 """
 companion/brain/fallback_manager.py
 =====================================
-Manages the provider fallback chain: Groq → OpenAI → Anthropic.
+Manages the provider fallback chain: Groq → OpenAI → Gemini.
 Automatically switches providers on rate-limit errors and tracks
 per-provider health for intelligent routing decisions.
 """
@@ -16,7 +16,7 @@ from typing import Optional
 
 from companion.brain.groq_client import GroqClient, GroqRateLimitError, GroqAPIError
 from companion.brain.openai_client import OpenAIClient, OpenAIRateLimitError, OpenAIAPIError
-from companion.brain.anthropic_client import AnthropicClient, AnthropicRateLimitError, AnthropicAPIError
+from companion.brain.gemini_client import GeminiClient, GeminiRateLimitError, GeminiAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class Provider(Enum):
     GROQ = "groq"
     OPENAI = "openai"
-    ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
     NONE = "none"
 
 
@@ -78,7 +78,7 @@ class FallbackManager:
     """
     Orchestrates the provider fallback chain.
 
-    Chain: Groq → OpenAI → Anthropic → None (graceful degradation)
+    Chain: Groq → OpenAI → Gemini → None (graceful degradation)
 
     On rate-limit: marks provider as cooling down, tries next.
     On API error: tries next provider immediately.
@@ -89,16 +89,16 @@ class FallbackManager:
         self,
         groq: Optional[GroqClient] = None,
         openai: Optional[OpenAIClient] = None,
-        anthropic: Optional[AnthropicClient] = None,
+        gemini: Optional[GeminiClient] = None,
     ) -> None:
         self.groq = groq
         self.openai = openai
-        self.anthropic = anthropic
+        self.gemini = gemini
 
         self._health = {
             Provider.GROQ: ProviderHealth("Groq"),
             Provider.OPENAI: ProviderHealth("OpenAI"),
-            Provider.ANTHROPIC: ProviderHealth("Anthropic"),
+            Provider.GEMINI: ProviderHealth("Gemini"),
         }
         self._active_provider = Provider.GROQ
         self._total_requests: int = 0
@@ -107,7 +107,7 @@ class FallbackManager:
     def _get_provider_chain(self) -> list[Provider]:
         """Return available providers in priority order."""
         chain = []
-        candidates = [Provider.GROQ, Provider.OPENAI, Provider.ANTHROPIC]
+        candidates = [Provider.GROQ, Provider.OPENAI, Provider.GEMINI]
         for p in candidates:
             health = self._health[p]
             client = self._get_client(p)
@@ -120,7 +120,7 @@ class FallbackManager:
         return {
             Provider.GROQ: self.groq,
             Provider.OPENAI: self.openai,
-            Provider.ANTHROPIC: self.anthropic,
+            Provider.GEMINI: self.gemini,
         }.get(provider)
 
     async def chat(
@@ -162,7 +162,7 @@ class FallbackManager:
                 logger.warning(f"Groq rate-limited, falling back to next provider")
                 continue
 
-            except (OpenAIRateLimitError, AnthropicRateLimitError):
+            except (OpenAIRateLimitError, GeminiRateLimitError):
                 self._health[provider].mark_rate_limited()
                 logger.warning(f"{provider.value} rate-limited, falling back")
                 continue
@@ -187,8 +187,8 @@ class FallbackManager:
             return await self.groq.chat(messages, temperature=temperature, max_tokens=max_tokens)
         elif provider == Provider.OPENAI and self.openai:
             return await self.openai.chat(messages, temperature=temperature, max_tokens=max_tokens)
-        elif provider == Provider.ANTHROPIC and self.anthropic:
-            return await self.anthropic.chat(messages, temperature=temperature, max_tokens=max_tokens)
+        elif provider == Provider.GEMINI and self.gemini:
+            return await self.gemini.chat(messages, temperature=temperature, max_tokens=max_tokens)
         return None
 
     @property
@@ -205,7 +205,7 @@ class FallbackManager:
 
     async def close_all(self) -> None:
         """Close all provider HTTP clients."""
-        for client in [self.groq, self.openai, self.anthropic]:
+        for client in [self.groq, self.openai, self.gemini]:
             if client and hasattr(client, "close"):
                 try:
                     await client.close()
