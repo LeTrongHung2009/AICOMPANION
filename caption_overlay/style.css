@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap');
+
+body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+    font-family: 'Outfit', sans-serif;
+}
+
+#caption-container {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    text-align: center;
+    pointer-events: none;
+}
+
+#caption-text {
+    font-size: 32px;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 
+        -2px -2px 0 #000,  
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+         0px  3px 6px rgba(0, 0, 0, 0.8);
+    background-color: rgba(13, 13, 26, 0.6);
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    display: inline-block;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+
+#caption-text.visible {
+    opacity: 1;
+}
+
+#caption-text.user {
+    color: #34d399; /* Green for user */
+    border-color: rgba(52, 211, 153, 0.2);
+}
+
+#caption-text.hana {
+    color: #c084fc; /* Purple for Hana */
+    border-color: rgba(192, 132, 252, 0.2);
+}
