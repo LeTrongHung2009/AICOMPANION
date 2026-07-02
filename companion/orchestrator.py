@@ -87,11 +87,13 @@ class AsyncioOrchestrator:
             transcribe_fn=self._run_whisper
         )
 
-        # Expression
-        self.vts = ExpressionEngine(config.vts.host, config.vts.port)
+        # Expression - DISABLED (No VTube Studio)
+        # self.vts = ExpressionEngine(config.vts.host, config.vts.port)
+        self.vts = None  # VTube Studio removed - using caption_server instead
 
-        # Movement
-        self.movement = MovementEngine(self.widget, config.idle.movement_idle_threshold)
+        # Movement - DISABLED (No avatar movement needed)
+        # self.movement = MovementEngine(self.widget, config.idle.movement_idle_threshold)
+        self.movement = None  # Movement engine removed for lightweight desktop companion
 
         # Dream Engine
         self.dream = DreamEngine(
@@ -138,10 +140,11 @@ class AsyncioOrchestrator:
             await self.vision.start()
         if self.config.enable_stt:
             await self.stt.start()
-        if self.config.enable_vts:
-            await self.vts.start()
-        if self.config.enable_movement:
-            await self.movement.start()
+        # VTS and Movement disabled - no avatar system
+        # if self.config.enable_vts:
+        #     await self.vts.start()
+        # if self.config.enable_movement:
+        #     await self.movement.start()
 
         await self.dream.start()
 
@@ -160,8 +163,9 @@ class AsyncioOrchestrator:
         
         await self.vision.stop()
         await self.stt.stop()
-        await self.vts.stop()
-        await self.movement.stop()
+        # VTS and Movement disabled
+        # await self.vts.stop()
+        # await self.movement.stop()
         await self.dream.stop()
         await self.learner.stop()
         await self.boredom.stop()
@@ -191,7 +195,8 @@ class AsyncioOrchestrator:
 
     # Event adapters feeding the PriorityQueue
     def _on_widget_text(self, text: str) -> None:
-        self.movement.update_interaction_time()
+        # Movement disabled - no avatar tracking needed
+        # self.movement.update_interaction_time()
         self.queue.put_nowait(
             Priority.USER_TEXT,
             message=text,
@@ -199,7 +204,8 @@ class AsyncioOrchestrator:
         )
 
     async def _on_voice_input(self, event: Event) -> None:
-        self.movement.update_interaction_time()
+        # Movement disabled
+        # self.movement.update_interaction_time()
         # Feed PyQt6 layout
         self.widget.chat_log.append_message("Bạn (nói)", str(event.data), is_user=True)
         await self.queue.put(
@@ -292,8 +298,11 @@ class AsyncioOrchestrator:
             # Save assistant log
             await self.memory.log_assistant_message(styled_text)
             
-            # Write to UI widget
+            # Write to UI widget (primary output - no VTS avatar)
             self.widget.append_assistant_response(styled_text)
+            
+            # Send to caption server for OBS overlay (optional)
+            # await self._bus.publish(Event(EventType.CAPTION_UPDATE, data=styled_text, source="orchestrator"))
             
             # Play aloud via TTS if configured
             if self.config.enable_tts:

@@ -28,15 +28,16 @@ logger = logging.getLogger(__name__)
 class APIConfig:
     """Cloud API credentials and endpoints."""
     groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
 
     # Model selections
-    groq_chat_model: str = field(default_factory=lambda: os.getenv("GROQ_CHAT_MODEL", "llama-3.3-70b-versatile"))
+    groq_chat_model: str = field(default_factory=lambda: os.getenv("GROQ_CHAT_MODEL", "llama-3.1-8b-instant"))
     groq_vision_model: str = field(default_factory=lambda: os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview"))
     groq_whisper_model: str = field(default_factory=lambda: os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3"))
+    gemini_vision_model: str = field(default_factory=lambda: os.getenv("GEMINI_VISION_MODEL", "gemini-1.5-flash"))
+    gemini_chat_model: str = field(default_factory=lambda: os.getenv("GEMINI_CHAT_MODEL", "gemini-1.5-flash"))
     openai_fallback_model: str = field(default_factory=lambda: os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4o-mini"))
-    anthropic_fallback_model: str = field(default_factory=lambda: os.getenv("ANTHROPIC_FALLBACK_MODEL", "claude-3-haiku-20240307"))
 
 
 @dataclass
@@ -164,10 +165,10 @@ class SystemConfig:
         warnings = []
         if not self.api.groq_api_key:
             warnings.append("GROQ_API_KEY not set — AI features will be disabled")
+        if not self.api.gemini_api_key:
+            warnings.append("GEMINI_API_KEY not set — Vision features will use Groq fallback")
         if not self.api.openai_api_key:
             warnings.append("OPENAI_API_KEY not set — OpenAI fallback unavailable")
-        if not self.api.anthropic_api_key:
-            warnings.append("ANTHROPIC_API_KEY not set — Anthropic fallback unavailable")
         return warnings
 
     def to_dict(self) -> dict:
@@ -186,8 +187,8 @@ class SystemConfig:
             },
             "api_keys_set": {
                 "groq": bool(self.api.groq_api_key),
+                "gemini": bool(self.api.gemini_api_key),
                 "openai": bool(self.api.openai_api_key),
-                "anthropic": bool(self.api.anthropic_api_key),
             }
         }
 

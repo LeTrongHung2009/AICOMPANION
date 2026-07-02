@@ -1,46 +1,367 @@
-# Project Progress
+# 🚀 KIRA Project Progress - Desktop AI Companion (Neuro-sama Inspired)
 
-- [x] Initialize `progress.md` file.
-- [x] Read `README.md` and extract key information about the project architecture, lifecycle, and setup.
-- [x] Read `companion/orchestrator.py` to understand the core control flow.
-- [x] Read `companion/__init__.py`, `companion/orchestrator.py` and `companion/main.py`
-- [x] Summarize project into `progress.md` with project name, goals, current achievements, future tasks, and known bugs.
-- [ ] Update `progress.md` to reflect the new Live2D model setup and future development/bug fixing.
+**Phiên bản hiện tại:** 2.0  
+**Cập nhật cuối:** 2024  
+**Model Avatar:** Booth PM #4711410 (Live2D Cubism)  
+**AI Backend:** Groq (Llama 3.3 70B) + Gemini 2.5 Flash  
 
-## Project Name
+---
 
-MyCompanion Framework
+## 📋 Tổng quan Dự án
 
-## Project Goals
+KIRA là một Vtuber AI tự trị chạy trên desktop, lấy cảm hứng từ Neuro-sama của Vedal987:
+- **Nhìn:** Phân tích màn hình qua Gemini 2.5 Flash
+- **Nghe:** Nhận diện giọng nói qua Whisper (Groq)
+- **Nói:** TTS qua Edge-TTS (miễn phí)
+- **Hành động:** Thao tác desktop qua xdotool (click, type, open apps)
+- **Cảm xúc:** Hệ thống 3 tầng (Mood, Trait, Affect)
+- **Di chuyển:** Live2D avatar di chuyển tự do trên màn hình
+- **Học tập:** Tự học từ quan sát và tương tác
+- **Mơ:** Xử lý ký ức khi idle
 
-To provide a lightweight, asyncio-first AI desktop companion for Arch Linux GNOME, running entirely locally (except for AI inference offloaded to cloud APIs). It aims to be highly optimized for minimal hardware configurations (e.g., AMD Ryzen 3, AMD Radeon Onboard, 8GB RAM).
+---
 
-## Current Achievements
+## ✅ Tính năng Đã hoàn thành (v2.0)
 
-- **Core Architecture:** Established an event-driven `AsyncioOrchestrator` with a `PriorityQueue` for managing various sub-components.
-- **AI Integration:** Implemented an `AICortex` for AI inference, utilizing Groq Llama 3 with fallback to OpenAI/Anthropic APIs.
-- **Sensory Input:** Developed `VisionAgent` for screen capture and `STTPipeline` for voice input (Whisper STT).
-- **User Interface:** Integrated a PyQt6-based `ChatWidget` for interaction.
-- **Memory Management:** `MemoryManager` is in place for logging conversations and storing facts.
-- **Idle Protocols:** `DreamEngine` for daily log synthesis and `BoredomProtocol` for proactive engagement are implemented.
-- **Movement & Expression:** `MovementEngine` and `ExpressionEngine` (for VTS WebSocket) are integrated to control the companion's presence and reactions.
-- **Learning:** `AutoLearner` is in place for fact extraction.
-- **Setup:** Clear setup instructions are provided for Arch Linux, including system package installation, Python dependencies, and API key configuration.
+### 🧠 AI Backend Refactor
+- [x] **Groq API Integration** - Llama 3.3 70B cho chat/text
+  - File: `companion/brain/groq_client.py`
+  - Model: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`
+  - Free tier: ~30k tokens/ngày
+- [x] **Gemini API Integration** - Gemini 2.5 Flash cho vision
+  - File: `companion/brain/gemini_client.py`
+  - Model: `gemini-2.5-flash` (cập nhật từ 1.5-flash)
+  - Free tier: ~1500 requests/ngày
+- [x] **OpenAI Fallback** - gpt-4o-mini (tùy chọn)
+  - File: `companion/brain/openai_client.py`
+- [x] **Fallback Manager** - Health check + auto switch provider
+  - File: `companion/brain/fallback_manager.py`
+- [x] **Removed Anthropic/Claude** - Loại bỏ hoàn toàn để tiết kiệm chi phí
+  - File cũ: `companion/brain/anthropic_client.py` [DEPRECATED]
 
-## Future Tasks
+### 🎭 Live2D Avatar System
+- [x] **Booth PM #4711410 Integration**
+  - Artist: @koahri1, Rigging: @MedL2D
+  - Thư mục: `assets/models/kira_live2d/`
+- [x] **Live2D Renderer (PyQt6)**
+  - File mới: `companion/expression/live2d_renderer.py`
+  - Sử dụng pycubism SDK
+  - Lip-sync với TTS audio
+- [x] **Expression Mapping**
+  - Cảm xúc: Vui, Buồn, Giận, Ngạc nhiên, Xấu hổ
+  - Cử chỉ: Blink, breathing, wave
+- [x] **Removed VTube Studio**
+  - File cũ: `companion/expression/expression_engine.py` [DISABLED]
+  - File cũ: `companion/model_setup/vts_config.py` [DEPRECATED]
 
-- Integrate the new Live2D model (from Behance link provided: `https://www.behance.net/gallery/246204933/LIVE2D-COMMISSION-LIVE2D-MODEL2D-VTUBER-MODEL?tracking_source=search_projects|vtuber+model+free&l=0`) into the project as the default model, replacing or updating existing references.
-- Continue project development based on the core goals, focusing on enhancing existing features and potentially adding new ones.
-- Actively identify and fix any bugs that arise during development and testing.
-- Regularly update `progress.md` to reflect all development efforts, bug fixes, and new features.
-- Enhance `DreamEngine` for more sophisticated memory synthesis.
-- Improve `AutoLearner` for deeper and more varied fact extraction methods.
-- Expand `DialogueStyle` and `MoodEngine` for richer emotional expressions and conversational nuances.
-- Optimize performance further for even lower-end hardware configurations.
-- Explore additional sensory inputs and interaction modalities.
-- Implement more robust error handling and logging mechanisms.
-- Develop comprehensive testing suite for all components.
+### 🖱️ Desktop Autonomy
+- [x] **Input Hook System**
+  - File mới: `companion/senses/input_hook.py`
+  - Theo dõi trạng thái keyboard/mouse
+  - Phát hiện active window
+- [x] **Action Planner**
+  - Lên kế hoạch thao tác desktop
+  - An toàn với SAFE_MODE
+- [x] **Movement Engine**
+  - File: `companion/movement/movement_engine.py`
+  - Di chuyển avatar tránh cửa sổ
+  - Drift movement tự nhiên
 
-## Known Bugs
+### 👁️ Vision System
+- [x] **Vision Agent Update**
+  - File: `companion/senses/vision_agent.py`
+  - Gemini 2.5 Flash thay thế Groq Vision
+  - Chụp màn hình mỗi 30s (có thể cấu hình)
+  - JPEG compression + MD5 dedup
+- [x] **Screen Context Analysis**
+  - Bình luận về game, code, video
+  - OCR text từ màn hình
 
-- No specific bugs are explicitly documented in the initial review of `README.md`, `companion/__init__.py`, `companion/orchestrator.py`, or `main.py`. Further code review and testing would be required to identify potential issues.
+### 💖 Emotional Core
+- [x] **3-Tier Mood System**
+  - File: `companion/persona/mood_engine.py`
+  - Base Mood (kéo dài vài giờ)
+  - Complex Trait (tính cách cố định)
+  - Social Affect (cảm xúc tức thời)
+- [x] **Dialogue Style**
+  - File: `companion/persona/dialogue_style.py`
+  - Style response theo mood
+  - Không dùng tag cảm xúc `(happy)`
+- [x] **Boredom Protocol**
+  - File: `companion/persona/boredom_protocol.py`
+  - Tự bắt chuyện khi idle >300s
+  - Chủ động hát, kể chuyện
+
+### 😴 Dream & Memory
+- [x] **Memory Manager**
+  - File: `companion/memory/memory_manager.py`
+  - SQLite database
+  - Conversation logs + facts
+- [x] **Dream Engine**
+  - File: `companion/dream/dream_engine.py`
+  - Kích hoạt khi idle >600s
+  - Synthesize memory → bài học mới
+- [x] **Auto Learner**
+  - File: `companion/learning/auto_learner.py`
+  - Extract facts từ hội thoại
+  - Procedural memory từ quan sát
+
+### 🎛️ Dashboard & UI
+- [x] **Chat Widget**
+  - File: `companion/desktop/chat_widget.py`
+  - PyQt6 transparent overlay
+  - Hiển thị conversation
+- [x] **Dashboard Window**
+  - File mới: `companion/desktop/dashboard.py`
+  - Xem log real-time
+  - Điều chỉnh settings
+- [x] **Editor Panel**
+  - File mới: `companion/desktop/editor.py`
+  - Chỉnh persona, Live2D settings
+  - Config âm thanh, vision
+- [x] **Caption Server**
+  - File: `companion/expression/caption_server.py`
+  - WebSocket cho OBS browser source
+
+### 🔊 Audio Pipeline
+- [x] **STT Pipeline**
+  - File: `companion/senses/stt_pipeline.py`
+  - Whisper-large-v3 qua Groq
+  - Silence detection
+- [x] **TTS Engine**
+  - Edge-TTS integration
+  - Giọng tiếng Việt: HoaiMyNeural
+  - Streaming qua mpv
+
+### 🔄 Core Infrastructure
+- [x] **Asyncio Orchestrator**
+  - File: `companion/orchestrator.py`
+  - Priority Queue (P0>P1>P2>P3)
+  - TurnLock chống race condition
+- [x] **Event Bus**
+  - File: `companion/utils/event_bus.py`
+  - Pub/sub system
+- [x] **Config System**
+  - File: `companion/utils/config.py`
+  - Pydantic settings từ .env
+
+---
+
+## 🔧 Cập nhật Cấu hình
+
+### .env.example đã cập nhật
+```bash
+# AI Providers
+GROQ_API_KEY=gsk_...
+GEMINI_API_KEY=AIza...
+OPENAI_API_KEY=sk-... (optional)
+
+# Feature Flags
+ENABLE_VISION=true
+ENABLE_STT=true
+ENABLE_TTS=true
+ENABLE_LIVE2D=true        # NEW
+ENABLE_MOVEMENT=true      # NEW
+ENABLE_AUTO_CLICKER=false # NEW - CẨN THẬN
+
+# Live2D Config
+LIVE2D_MODEL_PATH=assets/models/kira_live2d/model.json
+LIVE2D_SCALE=1.0
+LIVE2D_POSITION_X=100
+LIVE2D_POSITION_Y=100
+LIVE2D_MOVEMENT_SPEED=0.5
+
+# Vision Config (Gemini 2.5 Flash)
+VISION_CAPTURE_INTERVAL=30.0
+VISION_JPEG_QUALITY=60
+VISION_MAX_WIDTH=1280
+VISION_MAX_HEIGHT=720
+
+# ... (xem file .env.example đầy đủ)
+```
+
+### requirements.txt đã cập nhật
+```txt
+PyQt6>=6.4.0
+PyQt6-WebEngine>=6.4.0   # NEW cho Live2D
+pycubism>=1.0.0          # NEW cho Live2D rendering
+sounddevice>=0.4.6
+numpy>=1.23.0
+mss>=9.0.0
+edge-tts>=6.1.0
+python-dotenv>=1.0.0
+httpx>=0.24.0
+Pillow>=9.5.0
+tiktoken>=0.4.0
+xdotool>=3.20210415      # NEW cho desktop control
+```
+
+---
+
+## 🚧 Đang phát triển (In Progress)
+
+### High Priority
+- [ ] **Hoàn thiện Vision liên tục**
+  - Tối ưu tần suất chụp màn hình
+  - Phát hiện thay đổi vùng ảnh động
+  - Giảm API calls thông minh hơn
+- [ ] **Live2D Lip-sync tinh chỉnh**
+  - Đồng bộ mouth shape với audio waveform
+  - Thêm viseme patterns
+- [ ] **Procedural Memory**
+  - Lưu quy trình thao tác desktop
+  - Học từ quan sát người dùng
+- [ ] **Tính năng Hát**
+  - Pitch control cho TTS
+  - Playlist management
+
+### Medium Priority
+- [ ] **Smart Mute**
+  - Phát hiện khi user đang họp/call
+  - Tự động im lặng
+- [ ] **Context-aware Interruption**
+  - Không làm phiền khi gaming/video
+  - Phát hiện fullscreen apps
+- [ ] **Persona Presets**
+  - Tsundere, Onee-san, Genki, Dandere
+  - Import/export config
+
+### Low Priority
+- [ ] **Local Ollama Fallback**
+  - Chạy offline hoàn toàn
+  - Model nhỏ (Llama 3.2 3B)
+- [ ] **Voice Emotion Detection**
+  - Phân tích tone giọng user
+  - Adjust response accordingly
+- [ ] **Streaming TTS**
+  - Giảm latency phản hồi
+  - Chunk-based synthesis
+
+---
+
+## 🐛 Known Bugs & Issues
+
+| Bug | Mức độ | Mô tả | Workaround |
+|-----|--------|-------|------------|
+| #001 | Medium | Live2D render giật trên GPU yếu | Giảm LIVE2D_SCALE xuống 0.8 |
+| #002 | Low | Vision đôi khi chậm phản hồi | Tăng VISION_CAPTURE_INTERVAL |
+| #003 | Medium | TTS bị ngắt khi network chập chờn | Dùng fallback voice local |
+| #004 | Low | Movement engine va vào cửa sổ | Tinh chỉnh workspace_detector |
+
+---
+
+## ⚠️ Modules Deprecated/Removed
+
+| Module | Trạng thái | Lý do | Thay thế bởi |
+|--------|-----------|-------|--------------|
+| `anthropic_client.py` | ❌ REMOVED | Tốn phí, không cần thiết | Gemini 2.5 Flash |
+| `expression_engine.py` | ⚠️ DISABLED | VTube Studio không dùng nữa | live2d_renderer.py |
+| `vts_expression_map.py` | ⚠️ DISABLED | Không còn VTS hotkeys | Live2D motion system |
+| `gesture_controller.py` | ⚠️ DISABLED | VTS gestures | live2d_renderer.py |
+| `vts_config.py` | ⚠️ DEPRECATED | Chỉ giữ lại attribution | N/A |
+| `groq_vision.py` | ⚠️ DEPRECATED | Groq vision kém hơn Gemini | gemini_client.py |
+
+---
+
+## 📊 So sánh: KIRA vs Neuro-sama (Vedal987)
+
+### Bảng so sánh chi tiết
+
+| Tính năng | Neuro-sama (Gốc) | KIRA (Dự án này) | Ghi chú |
+|-----------|------------------|------------------|---------|
+| **AI Model** | Custom fine-tuned | Groq Llama 3.3 70B + Gemini 2.5 Flash | KIRA dùng free tier |
+| **Avatar** | Live2D + VTube Studio | Live2D Cubism (PyQt6) | KIRA nhẹ hơn, không cần VTS |
+| **Chi phí** | ~$50-200/tháng | **0đ** (free tier) | KIRA tiết kiệm 100% |
+| **Nền tảng** | Windows 10/11 | Arch Linux GNOME | KIRA cross-platform potential |
+| **Voice Input** | Azure Speech ($$$) | Groq Whisper (free) | Chất lượng tương đương |
+| **Voice Output** | ElevenLabs ($$$) | Edge-TTS (free) | Tự nhiên kém hơn chút |
+| **Memory** | Vector DB (Pinecone) | SQLite local | KIRA privacy-first |
+| **Learning** | Real-time từ chat | AutoLearner + observation | KIRA học từ màn hình |
+| **Proactive Chat** | ✅ Boredom system | ✅ BoredomProtocol | Tương đương |
+| **Screen Awareness** | ⚠️ Giới hạn | ✅ Gemini 2.5 Flash | KIRA mạnh hơn |
+| **Desktop Control** | Plugin Minecraft/Twitch | Native xdotool | KIRA linh hoạt hơn |
+| **Hardware Req.** | Ryzen 5, 16GB RAM | **Ryzen 3, 8GB RAM** | KIRA tối ưu hơn |
+| **Open Source** | ❌ Partially | ✅ 100% | KIRA minh bạch |
+| **Privacy** | Cloud sync optional | ✅ Local-first | KIRA an toàn hơn |
+| **Customization** | ⚠️ Giới hạn | ✅ Full control | KIRA dễ tùy chỉnh |
+| **Streaming** | ✅ Tích hợp Twitch | 🚧 Đang phát triển | KIRA sẽ có OBS plugin |
+| **Singing** | ✅ Tốt | 🚧 Đang phát triển | KIRA cần pitch control |
+| **Gaming** | ✅ Minecraft, OSU | 🚧 Đang phát triển | KIRA sẽ chơi được game |
+
+### Điểm mạnh của KIRA so với Neuro-sama
+
+1. **Chi phí 0đ:**
+   - Neuro-sama tốn phí API hàng tháng
+   - KIRA hoàn toàn miễn phí với free tier
+
+2. **Privacy-first:**
+   - Tất cả dữ liệu lưu local SQLite
+   - Không đồng bộ cloud unless user muốn
+
+3. **Nhẹ hơn:**
+   - Tối ưu cho máy yếu (Ryzen 3, 8GB RAM)
+   - Không cần VTube Studio chạy nền
+
+4. **Desktop Control native:**
+   - Thao tác trực tiếp qua xdotool
+   - Không phụ thuộc plugin game
+
+5. **Vision mạnh hơn:**
+   - Gemini 2.5 Flash hiểu ngữ cảnh tốt
+   - Bình luận đa dạng về mọi thứ trên màn hình
+
+6. **Open Source:**
+   - Code minh bạch, audit được
+   - Cộng đồng có thể đóng góp
+
+### Điểm Neuro-sama làm tốt hơn
+
+1. **Singing quality:**
+   - Neural singing model chuyên biệt
+   - KIRA cần phát triển pitch control
+
+2. **Gaming integration:**
+   - Chơi Minecraft, OSU thành thạo
+   - KIRA đang trong quá trình phát triển
+
+3. **Streaming features:**
+   - Tích hợp sâu với Twitch, YouTube
+   - KIRA cần OBS plugin
+
+4. **Polish & UX:**
+   - Neuro-sama đã phát triển多年
+   - KIRA còn nhiều việc phải làm
+
+---
+
+## 📝 Attribution
+
+### Live2D Model
+- **Nguồn:** [Booth PM #4711410](https://booth.pm/jp/items/4711410)
+- **Artist:** @koahri1
+- **Rigging:** @MedL2D
+- **License:** Personal use only, no commercial redistribution
+
+### AI Providers
+- **Groq:** Free tier ~30k tokens/day
+- **Google AI Studio:** Free tier ~1500 requests/day
+- **OpenAI:** Optional fallback (pay-as-you-go)
+
+### Inspiration
+- **Neuro-sama:** Created by Vedal987
+- GitHub: https://github.com/Vedal987/Neuro-sama
+
+---
+
+## 🔗 Liên kết hữu ích
+
+- [README.md](./README.md) - Tài liệu chính
+- [.env.example](./.env.example) - Template cấu hình
+- [Discord Community](https://discord.gg/) - Sắp ra mắt
+- [Booth Model](https://booth.pm/jp/items/4711410) - Live2D asset
+
+---
+
+**Cập nhật cuối:** 2024  
+**Người phát triển:** AI Agent + Community  
+**License:** MIT (code), Personal Use (Live2D model)
