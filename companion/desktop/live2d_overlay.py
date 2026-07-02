@@ -2,30 +2,48 @@
 companion/desktop/live2d_overlay.py
 ====================================
 Live2D Cubism Overlay for Booth PM #4711410.
-Renders the Live2D model directly on PyQt6 transparent window.
+Renders the Live2D model via PyQt6-WebEngine using WebGL.
 Handles expressions, lip-sync, and movement.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QPalette, QColor
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QApplication
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QUrl, QSize
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 
 logger = logging.getLogger(__name__)
 
 # Model path configuration
 MODEL_DIR = Path(__file__).parent.parent.parent / "assets" / "models" / "kira_live2d"
 
+
+class Live2DWebPage(QWebEnginePage):
+    """Custom WebEngine page with console logging enabled."""
+    
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        """Capture JS console messages for debugging."""
+        js_level = {
+            0: "DEBUG",
+            1: "INFO", 
+            2: "WARNING",
+            3: "ERROR"
+        }.get(level, "LOG")
+        logger.debug(f"[JS {js_level}] {source_id}:{line_number} - {message}")
+
+
 class Live2DOverlay(QWidget):
     """
-    Transparent overlay window displaying Live2D avatar.
+    Transparent overlay window displaying Live2D avatar via WebEngine.
     Supports:
     - Expression changes (happy, sad, angry, etc.)
     - Lip-sync with TTS audio
@@ -35,6 +53,7 @@ class Live2DOverlay(QWidget):
     
     # Signals for expression control
     expression_changed = pyqtSignal(str)
+    model_loaded = pyqtSignal(bool)
     
     def __init__(
         self,
@@ -50,12 +69,15 @@ class Live2DOverlay(QWidget):
         self.current_expression = "neutral"
         self.is_talking = False
         self.mouth_open_value = 0.0
+        self._model_loaded = False
         
         # Setup window properties
         self._setup_window(initial_x, initial_y)
         
-        # Try to load Live2D model (fallback to placeholder if SDK not available)
-        self._model_loaded = False
+        # Setup WebEngine view for Live2D rendering
+        self._setup_webengine()
+        
+        # Load Live2D model
         self._load_model()
         
         # Animation timer for breathing/mouth movement
@@ -67,7 +89,7 @@ class Live2DOverlay(QWidget):
     
     def _setup_window(self, x: int, y: int) -> None:
         """Configure transparent overlay window."""
-        # Frameless, transparent window
+        # Frameless, transparent window that stays on top
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -75,6 +97,7 @@ class Live2DOverlay(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_X11DoNotAcceptFocus, True)
         
         # Initial position and size
         base_width = 400
@@ -83,80 +106,325 @@ class Live2DOverlay(QWidget):
         scaled_height = int(base_height * self.scale)
         
         self.setGeometry(x, y, scaled_width, scaled_height)
+        self.setMinimumSize(QSize(200, 300))
+    
+    def _setup_webengine(self) -> None:
+        """Setup QWebEngineView for Live2D rendering."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        # Placeholder label (fallback if Live2D SDK unavailable)
-        self.placeholder = QLabel("🌸 KIRA", self)
-        self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.placeholder.setStyleSheet("""
-            QLabel {
-                background-color: rgba(20, 20, 40, 180);
-                border-radius: 20px;
-                color: #a78bfa;
-                font-size: 24px;
-                font-weight: bold;
-            }
-        """)
-        self.placeholder.setGeometry(0, 0, scaled_width, scaled_height)
+        # Create WebEngine view
+        self.web_view = QWebEngineView(self)
+        self.web_view.setPage(Live2DWebPage(self.web_view))
+        
+        # Configure WebEngine settings
+        settings = self.web_view.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+        
+        # Make web view background transparent
+        self.web_view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.web_view.setStyleSheet("background: transparent;")
+        
+        layout.addWidget(self.web_view)
+        self.setLayout(layout)
     
     def _load_model(self) -> None:
-        """Load Live2D model from disk."""
+        """Load Live2D model from disk and render via WebEngine."""
         if not self.model_path.exists():
             logger.warning(f"Live2D model directory not found: {self.model_path}")
-            logger.info("Using placeholder display instead.")
+            self._show_placeholder("Model directory not found")
             return
         
-        # Check for model files
+        # Check for model.json file
         model_file = self.model_path / "model.json"
         if not model_file.exists():
             logger.warning(f"model.json not found in {self.model_path}")
+            self._show_placeholder("model.json not found")
             return
         
         try:
-            # Try to import PyCubism (optional dependency)
-            # If not available, fallback to placeholder
-            # import pycubism
-            # self._cubism_model = pycubism.load_model(str(model_file))
-            # self._model_loaded = True
-            # logger.info("Live2D model loaded successfully via PyCubism")
+            # Generate HTML content for Live2D rendering
+            html_content = self._generate_live2d_html(model_file)
             
-            # For now, use placeholder (PyCubism requires manual installation)
-            self._model_loaded = False
-            logger.info("Live2D model found but PyCubism SDK not installed. Using placeholder.")
-            logger.info("To enable full Live2D: pip install pycubism (requires manual build)")
+            # Load HTML into WebEngine
+            self.web_view.setHtml(html_content, QUrl.fromLocalFile(str(self.model_path)))
             
-        except ImportError as e:
-            logger.warning(f"PyCubism import failed: {e}")
-            logger.info("Falling back to placeholder display")
+            logger.info(f"Live2D model loaded: {model_file}")
+            self._model_loaded = True
+            self.model_loaded.emit(True)
+            
+        except Exception as e:
+            logger.error(f"Failed to load Live2D model: {e}")
+            self._show_placeholder(f"Error: {str(e)}")
             self._model_loaded = False
+            self.model_loaded.emit(False)
+    
+    def _generate_live2d_html(self, model_file: Path) -> str:
+        """Generate HTML page with Live2D Cubism SDK."""
+        # Convert Path to string for JSON
+        model_json_path = str(model_file.name)
+        
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KIRA Live2D</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        body {{
+            background: transparent;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }}
+        #canvas-container {{
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        canvas {{
+            max-width: 100%;
+            max-height: 100%;
+        }}
+        #loading {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #a78bfa;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="live2d"></canvas>
+    </div>
+    <div id="loading">Loading KIRA...</div>
+    
+    <!-- Live2D Cubism Core -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    
+    <!-- Live2D Cubism SDK -->
+    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    
+    <script>
+        // Wait for libraries to load
+        function waitForLibraries() {{
+            if (typeof live2d === 'undefined' || typeof Live2DCubismCore === 'undefined') {{
+                setTimeout(waitForLibraries, 100);
+                return;
+            }}
+            initializeLive2D();
+        }}
+        
+        let model = null;
+        let canvas = null;
+        let gl = null;
+        
+        function initializeLive2D() {{
+            document.getElementById('loading').style.display = 'none';
+            
+            canvas = document.getElementById('live2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            gl = canvas.getContext('webgl');
+            if (!gl) {{
+                console.error('WebGL not supported');
+                document.getElementById('loading').textContent = 'WebGL not supported';
+                document.getElementById('loading').style.display = 'block';
+                return;
+            }}
+            
+            // Enable transparency
+            gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            
+            // Load model
+            loadModel('{model_json_path}');
+        }}
+        
+        function loadModel(modelPath) {{
+            const request = new XMLHttpRequest();
+            request.open('GET', modelPath);
+            request.responseType = 'json';
+            
+            request.onload = function() {{
+                if (request.status >= 400) {{
+                    console.error('Failed to load model:', request.status);
+                    document.getElementById('loading').textContent = 'Failed to load model';
+                    document.getElementById('loading').style.display = 'block';
+                    return;
+                }}
+                
+                const modelData = request.response;
+                createModel(modelData);
+            }};
+            
+            request.onerror = function() {{
+                console.error('Network error loading model');
+                document.getElementById('loading').textContent = 'Network error';
+                document.getElementById('loading').style.display = 'block';
+            }};
+            
+            request.send();
+        }}
+        
+        function createModel(modelData) {{
+            try {{
+                model = live2d.Live2DModel();
+                model.loadModel(modelData);
+                model.saveContext();
+                
+                // Set initial expression
+                model.setParamFloat('PARAM_ANGLE_X', 0);
+                model.setParamFloat('PARAM_ANGLE_Y', 0);
+                model.setParamFloat('PARAM_ANGLE_Z', 0);
+                model.setParamFloat('PARAM_BODY_ANGLE_X', 0);
+                model.setParamFloat('PARAM_BODY_ANGLE_Y', 0);
+                
+                console.log('Live2D model created successfully');
+                
+                // Start render loop
+                render();
+            }} catch (e) {{
+                console.error('Failed to create model:', e);
+                document.getElementById('loading').textContent = 'Model creation error: ' + e.message;
+                document.getElementById('loading').style.display = 'block';
+            }}
+        }}
+        
+        let mouthOpen = 0.0;
+        let time = 0;
+        
+        function render() {{
+            if (!model) return;
+            
+            time += 0.016; // ~60fps
+            
+            // Breathing animation
+            const breath = Math.sin(time * 2) * 0.1;
+            model.setParamFloat('PARAM_BREATH', breath);
+            
+            // Blink animation (every 3-5 seconds)
+            const blink = Math.abs(Math.sin(time * 0.5)) > 0.95 ? 1 : 0;
+            model.setParamFloat('PARAM_EYE_L_OPEN', 1 - blink);
+            model.setParamFloat('PARAM_EYE_R_OPEN', 1 - blink);
+            
+            // Apply mouth openness for lip-sync
+            model.setParamFloat('PARAM_MOUTH_OPEN_Y', mouthOpen);
+            
+            model.update();
+            model.draw();
+            
+            requestAnimationFrame(render);
+        }}
+        
+        // Expose functions for Python to call
+        window.setExpression = function(expr) {{
+            if (!model) return;
+            console.log('Setting expression:', expr);
+            // Map expressions to parameters
+            const expressions = {{
+                'neutral': {{ eye: 1, mouth: 0 }},
+                'happy': {{ eye: 1.2, mouth: 0.3 }},
+                'sad': {{ eye: 0.8, mouth: -0.2 }},
+                'angry': {{ eye: 0.9, mouth: -0.1 }},
+                'surprised': {{ eye: 1.5, mouth: 0.5 }},
+                'blush': {{ eye: 1, mouth: 0.1 }}
+            }};
+            const exp = expressions[expr] || expressions['neutral'];
+            model.setParamFloat('PARAM_EYE_L_OPEN', exp.eye);
+            model.setParamFloat('PARAM_EYE_R_OPEN', exp.eye);
+        }};
+        
+        window.setMouthOpen = function(value) {{
+            mouthOpen = value;
+        }};
+        
+        window.setModelAngle = function(x, y, z) {{
+            if (!model) return;
+            model.setParamFloat('PARAM_ANGLE_X', x);
+            model.setParamFloat('PARAM_ANGLE_Y', y);
+            model.setParamFloat('PARAM_ANGLE_Z', z);
+        }};
+        
+        // Auto-start
+        waitForLibraries();
+    </script>
+</body>
+</html>"""
+        return html
+    
+    def _show_placeholder(self, message: str) -> None:
+        """Show placeholder when model cannot be loaded."""
+        placeholder_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }}
+        .placeholder {{
+            background: rgba(20, 20, 40, 0.8);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            color: #a78bfa;
+            font-size: 24px;
+            font-weight: bold;
+        }}
+    </style>
+</head>
+<body>
+    <div class="placeholder">
+        🌸 KIRA<br>
+        <span style="font-size: 14px; opacity: 0.8;">{message}</span>
+    </div>
+</body>
+</html>"""
+        self.web_view.setHtml(placeholder_html)
+        self._model_loaded = False
     
     def _update_animation(self) -> None:
         """Update breathing and mouth animation."""
         if not self._model_loaded:
-            # Animate placeholder opacity for breathing effect
-            current_alpha = self.placeholder.palette().color(QPalette.ColorRole.Window).alpha()
-            breath_offset = math.sin(asyncio.get_event_loop().time() * 2) * 10
-            new_alpha = max(150, min(200, 180 + breath_offset))
-            
-            # Update placeholder style with breathing effect
-            if self.is_talking:
-                # Pulsing effect when talking
-                pulse = int(abs(math.sin(asyncio.get_event_loop().time() * 8)) * 30)
-                new_alpha += pulse
-            
-            self.placeholder.setStyleSheet(f"""
-                QLabel {{
-                    background-color: rgba(20, 20, 40, {int(new_alpha)});
-                    border-radius: 20px;
-                    color: #a78bfa;
-                    font-size: 24px;
-                    font-weight: bold;
-                }}
-            """)
             return
         
-        # TODO: Update Live2D model parameters when PyCubism is available
-        # self._cubism_model.set_parameter("ParamMouthOpenY", self.mouth_open_value)
-        # self._cubism_model.update()
+        # Breathing animation
+        breath_value = math.sin(asyncio.get_event_loop().time() * 2) * 0.1
+        
+        # Apply mouth openness if talking
+        if self.is_talking:
+            # Smooth mouth movement
+            target = self.mouth_open_value
+            self.mouth_open_value = 0.7 * self.mouth_open_value + 0.3 * target
+            
+            # Call JS to update mouth
+            self.web_view.page().runJavaScript(
+                f"window.setMouthOpen({self.mouth_open_value})"
+            )
     
     def set_expression(self, expression: str) -> None:
         """
@@ -173,20 +441,11 @@ class Live2DOverlay(QWidget):
         self.current_expression = expression
         self.expression_changed.emit(expression)
         
-        if not self._model_loaded:
-            # Update placeholder emoji based on expression
-            emoji_map = {
-                'neutral': '🌸',
-                'happy': '😊',
-                'sad': '😢',
-                'angry': '😠',
-                'surprised': '😲',
-                'blush': '😳',
-            }
-            self.placeholder.setText(f"{emoji_map[expression]} KIRA")
-        else:
-            # TODO: Set Live2D expression parameters
-            pass
+        if self._model_loaded:
+            # Call JS to change expression
+            self.web_view.page().runJavaScript(
+                f"window.setExpression('{expression}')"
+            )
         
         logger.debug(f"Expression changed to: {expression}")
     
@@ -199,6 +458,8 @@ class Live2DOverlay(QWidget):
         """Stop talking animation."""
         self.is_talking = False
         self.mouth_open_value = 0.0
+        if self._model_loaded:
+            self.web_view.page().runJavaScript("window.setMouthOpen(0.0)")
         logger.debug("Stopped talking animation")
     
     def update_mouth(self, audio_amplitude: float) -> None:
@@ -213,11 +474,12 @@ class Live2DOverlay(QWidget):
         
         # Clamp and smooth mouth value
         target_value = min(1.0, max(0.0, audio_amplitude))
-        self.mouth_open_value = 0.7 * self.mouth_open_value + 0.3 * target_value
+        self.mouth_open_value = target_value
         
         if self._model_loaded:
-            # TODO: Update Live2D mouth parameter
-            pass
+            self.web_view.page().runJavaScript(
+                f"window.setMouthOpen({target_value})"
+            )
     
     def move_to(self, x: int, y: int) -> None:
         """Move avatar to screen coordinates."""
@@ -231,26 +493,30 @@ class Live2DOverlay(QWidget):
         new_y = int(current_pos.y() + dy)
         self.move(new_x, new_y)
     
-    def resize_event(self, event) -> None:
+    def resizeEvent(self, event) -> None:
         """Handle window resize."""
-        if self.placeholder:
-            self.placeholder.setGeometry(0, 0, self.width(), self.height())
+        if self.web_view:
+            self.web_view.setGeometry(0, 0, self.width(), self.height())
         super().resizeEvent(event)
     
-    def close(self) -> None:
+    def closeEvent(self, event) -> None:
         """Cleanup resources."""
         self.animation_timer.stop()
-        # TODO: Cleanup Live2D model if loaded
-        super().close()
+        if self.web_view:
+            self.web_view.close()
+        logger.info("Live2D Overlay closed")
+        super().closeEvent(event)
 
 
 # Singleton instance management
 _overlay_instance: Optional[Live2DOverlay] = None
 
+
 def get_live2d_overlay() -> Optional[Live2DOverlay]:
     """Get or create the global Live2D overlay instance."""
     global _overlay_instance
     return _overlay_instance
+
 
 def create_live2d_overlay(
     model_path: Optional[Path] = None,

@@ -1,6 +1,6 @@
 # 🚀 KIRA Project Progress - Desktop AI Companion (Neuro-sama Inspired)
 
-**Phiên bản hiện tại:** 2.0  
+**Phiên bản hiện tại:** 2.1 (Live2D WebEngine Fix)  
 **Cập nhật cuối:** 2024  
 **Model Avatar:** Booth PM #4711410 (Live2D Cubism)  
 **AI Backend:** Groq (Llama 3.3 70B) + Gemini 2.5 Flash  
@@ -365,3 +365,81 @@ xdotool>=3.20210415      # NEW cho desktop control
 **Cập nhật cuối:** 2024  
 **Người phát triển:** AI Agent + Community  
 **License:** MIT (code), Personal Use (Live2D model)
+---
+
+## 🔧 BUGFIX: Live2D Không Hiển Thị (v2.1 - 2024-01-XX)
+
+### Nguyên nhân lỗi cũ (v2.0):
+1. **Class name không đồng bộ**: `live2d_overlay.py` định nghĩa `Live2DOverlay` nhưng `main_live2d.py` gọi `Live2DOverlayApp` → ImportError
+2. **Thiếu QApplication**: Không khởi tạo QApplication trước khi tạo widget
+3. **Render method cũ**: Dùng placeholder QLabel thay vì render thực tế
+4. **Không có WebEngine**: PyQt6 cần QWebEngineView để render WebGL content
+
+### Giải pháp đã implement (v2.1):
+
+#### 1. Viết lại `live2d_overlay.py` dùng PyQt6-WebEngine
+- **QWebEngineView**: Render HTML/JS với WebGL support
+- **Custom QWebEnginePage**: Bắt JS console messages để debug
+- **HTML generator**: Tự động sinh HTML với Live2D Cubism SDK từ CDN
+- **Transparent background**: WA_TranslucentBackground cho cả window và web view
+- **Python ↔ JS Bridge**: Gọi hàm JS từ Python qua `runJavaScript()`
+
+#### 2. Cập nhật `main_live2d.py`
+```python
+from PyQt6.QtWidgets import QApplication
+from companion.desktop.live2d_overlay import Live2DOverlay
+
+app = QApplication(sys.argv)
+overlay = Live2DOverlay(initial_x=100, initial_y=100, scale=0.8)
+overlay.show()
+app.exec()
+```
+
+#### 3. JavaScript API cho điều khiển model
+```javascript
+// Từ Python gọi JS
+web_view.page().runJavaScript("window.setExpression('happy')")
+web_view.page().runJavaScript("window.setMouthOpen(0.5)")
+
+// JS functions exposed:
+window.setExpression(expr)   // Đổi biểu cảm: neutral, happy, sad, angry, surprised, blush
+window.setMouthOpen(value)   // Lip-sync: 0.0-1.0
+window.setModelAngle(x,y,z)  // Xoay đầu model
+```
+
+#### 4. Debug Console cho WebEngine
+```python
+class Live2DWebPage(QWebEnginePage):
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        js_level = {0: "DEBUG", 1: "INFO", 2: "WARNING", 3: "ERROR"}.get(level, "LOG")
+        logger.debug(f"[JS {js_level}] {source_id}:{line_number} - {message}")
+```
+
+### Cách bật Debug Mode:
+```bash
+# Thêm logging vào đầu main_live2d.py
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+python main_live2d.py
+```
+
+### Cấu trúc Model yêu cầu:
+```
+assets/models/kira_live2d/
+├── model.json              # BẮT BUỘC - File cấu hình chính
+├── *.moc3                  # BẮT BUỘC - File model binary
+├── textures/               # BẮT BUỘC - Thư mục texture PNG
+│   └── texture_00.png
+├── motions/                # Tùy chọn - Animation
+│   └── idle.mtn3
+└── physics.json            # Tùy chọn - Physics settings
+```
+
+### Files đã cập nhật:
+| File | Thay đổi |
+|------|----------|
+| `companion/desktop/live2d_overlay.py` | Viết lại hoàn toàn dùng QWebEngineView |
+| `main_live2d.py` | Thêm QApplication, sửa class name |
+| `LIVE2D_MODEL_IMPORT_GUIDE.md` | Hướng dẫn import model mới |
+| `progress.md` | Thêm section bugfix v2.1 |
+

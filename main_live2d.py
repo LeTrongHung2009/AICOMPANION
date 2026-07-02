@@ -21,17 +21,30 @@ print("   Download from: https://booth.pm/jp/items/4711410")
 print("=" * 60)
 
 try:
-    from companion.desktop.live2d_overlay import Live2DOverlayApp
+    from PyQt6.QtWidgets import QApplication
+    from companion.desktop.live2d_overlay import Live2DOverlay
     
     if __name__ == "__main__":
-        app = Live2DOverlayApp()
-        exit_code = app.run()
+        # Initialize QApplication with WebEngine support
+        app = QApplication(sys.argv)
+        app.setApplicationName("KIRA Live2D")
+        
+        # Create and show Live2D overlay
+        overlay = Live2DOverlay(
+            initial_x=100,
+            initial_y=100,
+            scale=0.8
+        )
+        overlay.show()
+        
+        # Run event loop
+        exit_code = app.exec()
         sys.exit(exit_code)
         
 except ImportError as e:
     print(f"❌ Error importing Live2D module: {e}")
     print("\n💡 To fix this:")
-    print("   1. Install PyQt6-WebEngine: pip install PyQt6-WebEngine")
+    print("   1. Install PyQt6-WebEngine: pip install PyQt6 PyQt6-WebEngine")
     print("   2. Download Live2D model from Booth.pm")
     print("   3. Extract to: assets/models/kira_live2d/")
     sys.exit(1)
