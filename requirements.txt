@@ -1,11 +1,33 @@
+# Core GUI & System
 PyQt6>=6.4.0
+PyQt6-WebEngine>=6.4.0  # For Live2D rendering via WebGL
 sounddevice>=0.4.6
 numpy>=1.23.0
 mss>=9.0.0
 websockets>=11.0.0
 psutil>=5.9.0
+Pillow>=9.5.0
+
+# AI APIs
+groq>=0.4.0  # Groq API client for Llama models
+google-generativeai>=0.8.0  # Gemini API client
+openai>=1.0.0  # OpenAI API client (fallback)
+tiktoken>=0.4.0  # Token counting
+
+# TTS & Audio
 edge-tts>=6.1.0
+pydub>=0.25.0  # Audio manipulation
+
+# Desktop Automation (Linux)
+python-xlib>=0.33  # X11 interaction
+evdev>=1.7.0  # Input device monitoring
+pynput>=1.7.6  # Cross-platform input control
+
+# Utilities
 python-dotenv>=1.0.0
 httpx>=0.24.0
-Pillow>=9.5.0
-tiktoken>=0.4.0
+aiofiles>=23.0.0  # Async file operations
+qasync>=0.27.0  # PyQt6 + asyncio integration
+
+# Note: xdotool is a system package, install via: sudo pacman -S xdotool
+# Note: Live2D Cubism SDK not available via pip - manual installation required
