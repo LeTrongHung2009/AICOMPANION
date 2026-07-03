@@ -206,6 +206,16 @@ class Live2DOverlay(QWidget):
             font-family: Arial, sans-serif;
             font-size: 18px;
             text-align: center;
+            background: rgba(20, 20, 40, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #a78bfa;
+        }}
+        #error-details {{
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 10px;
+            max-width: 400px;
         }}
     </style>
 </head>
@@ -215,156 +225,387 @@ class Live2DOverlay(QWidget):
     </div>
     <div id="loading">Loading KIRA...</div>
     
-    <!-- Live2D Cubism Core -->
+    <!-- Live2D Cubism Core (Required for Cubism 4+) -->
     <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
     
-    <!-- Live2D Cubism SDK -->
-    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    <!-- Live2D Cubism 4 SDK for Web (R3) -->
+    <script src="https://cdn.jsdelivr.net/npm/live2d-cubism-sdk-for-web@4.0.0/dist/live2dcubismframework.min.js"></script>
     
     <script>
-        // Wait for libraries to load
+        // Global state
+        let model = null;
+        let canvas = null;
+        let gl = null;
+        let cubismApp = null;
+        let animationFrameId = null;
+        let mouthOpen = 0.0;
+        let targetMouthOpen = 0.0;
+        let time = 0;
+        let isModelLoaded = false;
+        let parameterIds = {{}};
+        
+        // Wait for libraries to load with timeout
+        let loadAttempts = 0;
+        const MAX_LOAD_ATTEMPTS = 50;
+        
         function waitForLibraries() {{
-            if (typeof live2d === 'undefined' || typeof Live2DCubismCore === 'undefined') {{
+            loadAttempts++;
+            if (loadAttempts > MAX_LOAD_ATTEMPTS) {{
+                showError('Failed to load Live2D libraries. Check internet connection.');
+                return;
+            }}
+            if (typeof Live2DCubismCore === 'undefined') {{
+                setTimeout(waitForLibraries, 100);
+                return;
+            }}
+            if (typeof live2d === 'undefined' || typeof live2d.CubismFramework === 'undefined') {{
                 setTimeout(waitForLibraries, 100);
                 return;
             }}
             initializeLive2D();
         }}
         
-        let model = null;
-        let canvas = null;
-        let gl = null;
+        function showError(message) {{
+            const loadingEl = document.getElementById('loading');
+            loadingEl.innerHTML = '<strong>⚠️ Error</strong><br>' + message;
+            loadingEl.style.display = 'block';
+            console.error(message);
+        }}
+        
+        function showLoading(message) {{
+            const loadingEl = document.getElementById('loading');
+            loadingEl.textContent = message;
+            loadingEl.style.display = 'block';
+        }}
+        
+        function hideLoading() {{
+            const loadingEl = document.getElementById('loading');
+            loadingEl.style.display = 'none';
+        }}
         
         function initializeLive2D() {{
-            document.getElementById('loading').style.display = 'none';
-            
-            canvas = document.getElementById('live2d');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            gl = canvas.getContext('webgl');
-            if (!gl) {{
-                console.error('WebGL not supported');
-                document.getElementById('loading').textContent = 'WebGL not supported';
-                document.getElementById('loading').style.display = 'block';
-                return;
+            try {{
+                // Initialize Cubism Framework
+                live2d.CubismFramework.startUp();
+                live2d.CubismFramework.initialize();
+                
+                hideLoading();
+                
+                canvas = document.getElementById('live2d');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                
+                gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                if (!gl) {{
+                    showError('WebGL not supported in this browser');
+                    return;
+                }}
+                
+                // Enable transparency with proper blending
+                gl.clearColor(0.0, 0.0, 0.0, 0.0);
+                gl.enable(gl.BLEND);
+                gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+                
+                // Load model
+                loadModel('{model_json_path}');
+            }} catch (e) {{
+                showError('Initialization error: ' + e.message);
+                console.error(e);
             }}
-            
-            // Enable transparency
-            gl.clearColor(0.0, 0.0, 0.0, 0.0);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            
-            // Load model
-            loadModel('{model_json_path}');
         }}
         
         function loadModel(modelPath) {{
+            showLoading('Loading model data...');
+            
             const request = new XMLHttpRequest();
             request.open('GET', modelPath);
             request.responseType = 'json';
             
             request.onload = function() {{
                 if (request.status >= 400) {{
-                    console.error('Failed to load model:', request.status);
-                    document.getElementById('loading').textContent = 'Failed to load model';
-                    document.getElementById('loading').style.display = 'block';
+                    showError('Failed to load model.json (HTTP ' + request.status + ')');
                     return;
                 }}
                 
                 const modelData = request.response;
-                createModel(modelData);
+                createModel(modelData, modelPath.substring(0, modelPath.lastIndexOf('/')));
             }};
             
             request.onerror = function() {{
-                console.error('Network error loading model');
-                document.getElementById('loading').textContent = 'Network error';
-                document.getElementById('loading').style.display = 'block';
+                showError('Network error loading model. Check file paths.');
             }};
             
             request.send();
         }}
         
-        function createModel(modelData) {{
+        function loadFile(path, type) {{
+            return new Promise((resolve, reject) => {{
+                const request = new XMLHttpRequest();
+                request.open('GET', path);
+                
+                if (type === 'arraybuffer') {{
+                    request.responseType = 'arraybuffer';
+                }} else if (type === 'json') {{
+                    request.responseType = 'json';
+                }}
+                
+                request.onload = function() {{
+                    if (request.status >= 400) {{
+                        reject(new Error('HTTP ' + request.status));
+                    }} else {{
+                        resolve(request.response);
+                    }}
+                }};
+                
+                request.onerror = function() {{
+                    reject(new Error('Network error'));
+                }};
+                
+                request.send();
+            }});
+        }}
+        
+        async function createModel(modelData, basePath) {{
             try {{
-                model = live2d.Live2DModel();
-                model.loadModel(modelData);
-                model.saveContext();
+                showLoading('Loading resources...');
                 
-                // Set initial expression
-                model.setParamFloat('PARAM_ANGLE_X', 0);
-                model.setParamFloat('PARAM_ANGLE_Y', 0);
-                model.setParamFloat('PARAM_ANGLE_Z', 0);
-                model.setParamFloat('PARAM_BODY_ANGLE_X', 0);
-                model.setParamFloat('PARAM_BODY_ANGLE_Y', 0);
+                // Load Moc file
+                const mocPath = basePath + '/' + modelData.FileReferences.Moc;
+                const mocArrayBuffer = await loadFile(mocPath, 'arraybuffer');
+                const moc = live2d.CubismMoc.fromArrayBuffer(mocArrayBuffer);
                 
-                console.log('Live2D model created successfully');
+                if (!moc) {{
+                    throw new Error('Failed to load .moc3 file');
+                }}
+                
+                // Load textures
+                const texturePaths = modelData.FileReferences.Textures || [];
+                const textures = [];
+                
+                for (let i = 0; i < texturePaths.length; i++) {{
+                    showLoading(`Loading texture ${{i+1}}/${{texturePaths.length}}...`);
+                    const texPath = basePath + '/' + texturePaths[i];
+                    const texArrayBuffer = await loadFile(texPath, 'arraybuffer');
+                    
+                    const texture = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(texArrayBuffer));
+                    gl.generateMipmap(gl.TEXTURE_2D);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                    
+                    textures.push(texture);
+                }}
+                
+                // Create model
+                model = moc.createModel();
+                
+                // Setup renderer
+                cubismApp = new live2d.CubismUserModel();
+                cubismApp.model = model;
+                cubismApp.renderer = new live2d.CubismRenderer_WebGL(model);
+                cubismApp.renderer.initialize(textures);
+                
+                // Load motions if available
+                if (modelData.FileReferences.Motions) {{
+                    // Motions can be loaded here
+                    console.log('Motions available:', Object.keys(modelData.FileReferences.Motions));
+                }}
+                
+                // Discover parameter IDs dynamically
+                discoverParameters(model);
+                
+                // Set initial values
+                resetModelParameters();
+                
+                console.log('Live2D model loaded successfully');
+                isModelLoaded = true;
+                hideLoading();
                 
                 // Start render loop
                 render();
             }} catch (e) {{
-                console.error('Failed to create model:', e);
-                document.getElementById('loading').textContent = 'Model creation error: ' + e.message;
-                document.getElementById('loading').style.display = 'block';
+                showError('Model creation error: ' + e.message);
+                console.error('Full error:', e);
             }}
         }}
         
-        let mouthOpen = 0.0;
-        let time = 0;
+        function discoverParameters(model) {{
+            // Dynamically discover all parameter IDs
+            const paramCount = model.parameters.count;
+            parameterIds = {{}};
+            
+            for (let i = 0; i < paramCount; i++) {{
+                const id = model.parameters.getId(i);
+                const value = model.parameters.getValue(i);
+                
+                // Store common parameters
+                if (id.includes('AngleX')) parameterIds.angleX = id;
+                else if (id.includes('AngleY')) parameterIds.angleY = id;
+                else if (id.includes('AngleZ')) parameterIds.angleZ = id;
+                else if (id.includes('BodyAngleX')) parameterIds.bodyAngleX = id;
+                else if (id.includes('EyeBlink')) parameterIds.eyeBlink = id;
+                else if (id.includes('EyeL') && id.includes('Open')) parameterIds.eyeLOpen = id;
+                else if (id.includes('EyeR') && id.includes('Open')) parameterIds.eyeROpen = id;
+                else if (id.includes('Mouth') && id.includes('Open')) parameterIds.mouthOpen = id;
+                else if (id.includes('Breath')) parameterIds.breath = id;
+                
+                console.log(`Parameter ${{i}}: ${{id}} = ${{value}}`);
+            }}
+            
+            console.log('Discovered parameters:', parameterIds);
+        }}
+        
+        function setParameterValue(paramName, value, defaultValue = 0) {{
+            if (!model || !isModelLoaded) return;
+            
+            const id = parameterIds[paramName];
+            if (id) {{
+                model.setParameterValueById(id, value);
+            }} else {{
+                // Try to find by common naming patterns
+                const paramCount = model.parameters.count;
+                for (let i = 0; i < paramCount; i++) {{
+                    const pid = model.parameters.getId(i);
+                    if (pid.includes(paramName)) {{
+                        model.setParameterValueById(pid, value);
+                        parameterIds[paramName] = pid;
+                        return;
+                    }}
+                }}
+                // Use default if parameter not found
+                console.warn(`Parameter '${{paramName}}' not found in this model`);
+            }}
+        }}
+        
+        function resetModelParameters() {{
+            if (!model) return;
+            
+            // Reset all angles to neutral
+            setParameterValue('angleX', 0);
+            setParameterValue('angleY', 0);
+            setParameterValue('angleZ', 0);
+            setParameterValue('bodyAngleX', 0);
+            
+            // Set default eye openness
+            if (parameterIds.eyeLOpen) {{
+                model.setParameterValueById(parameterIds.eyeLOpen, 1.0);
+            }}
+            if (parameterIds.eyeROpen) {{
+                model.setParameterValueById(parameterIds.eyeROpen, 1.0);
+            }}
+        }}
         
         function render() {{
-            if (!model) return;
+            if (!model || !isModelLoaded) {{
+                animationFrameId = requestAnimationFrame(render);
+                return;
+            }}
             
             time += 0.016; // ~60fps
             
+            // Smooth mouth movement
+            mouthOpen += (targetMouthOpen - mouthOpen) * 0.3;
+            
             // Breathing animation
             const breath = Math.sin(time * 2) * 0.1;
-            model.setParamFloat('PARAM_BREATH', breath);
+            setParameterValue('breath', breath);
             
-            // Blink animation (every 3-5 seconds)
-            const blink = Math.abs(Math.sin(time * 0.5)) > 0.95 ? 1 : 0;
-            model.setParamFloat('PARAM_EYE_L_OPEN', 1 - blink);
-            model.setParamFloat('PARAM_EYE_R_OPEN', 1 - blink);
+            // Blink animation (every 3-5 seconds randomly)
+            const blinkCycle = Math.abs(Math.sin(time * 0.5));
+            const isBlinking = blinkCycle > 0.95;
+            const eyeOpenValue = isBlinking ? 0.0 : 1.0;
+            
+            if (parameterIds.eyeLOpen) {{
+                model.setParameterValueById(parameterIds.eyeLOpen, eyeOpenValue);
+            }}
+            if (parameterIds.eyeROpen) {{
+                model.setParameterValueById(parameterIds.eyeROpen, eyeOpenValue);
+            }}
             
             // Apply mouth openness for lip-sync
-            model.setParamFloat('PARAM_MOUTH_OPEN_Y', mouthOpen);
+            setParameterValue('mouthOpen', mouthOpen);
             
+            // Update and draw
             model.update();
-            model.draw();
+            cubismApp.renderer.draw();
             
-            requestAnimationFrame(render);
+            animationFrameId = requestAnimationFrame(render);
         }}
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {{
+            if (canvas) {{
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }}
+        }});
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {{
+            if (animationFrameId) {{
+                cancelAnimationFrame(animationFrameId);
+            }}
+            if (cubismApp && cubismApp.renderer) {{
+                cubismApp.renderer.release();
+            }}
+            if (live2d.CubismFramework) {{
+                live2d.CubismFramework.dispose();
+            }}
+        }});
         
         // Expose functions for Python to call
         window.setExpression = function(expr) {{
-            if (!model) return;
+            if (!model || !isModelLoaded) {{
+                console.warn('Model not loaded yet');
+                return;
+            }}
             console.log('Setting expression:', expr);
-            // Map expressions to parameters
+            
+            // Expression mapping - adjust based on model's actual parameters
             const expressions = {{
-                'neutral': {{ eye: 1, mouth: 0 }},
-                'happy': {{ eye: 1.2, mouth: 0.3 }},
-                'sad': {{ eye: 0.8, mouth: -0.2 }},
-                'angry': {{ eye: 0.9, mouth: -0.1 }},
-                'surprised': {{ eye: 1.5, mouth: 0.5 }},
-                'blush': {{ eye: 1, mouth: 0.1 }}
+                'neutral': {{ eyeScale: 1.0, mouthY: 0 }},
+                'happy': {{ eyeScale: 1.2, mouthY: 0.3 }},
+                'sad': {{ eyeScale: 0.8, mouthY: -0.2 }},
+                'angry': {{ eyeScale: 0.9, mouthY: -0.1 }},
+                'surprised': {{ eyeScale: 1.5, mouthY: 0.5 }},
+                'blush': {{ eyeScale: 1.0, mouthY: 0.1 }}
             }};
+            
             const exp = expressions[expr] || expressions['neutral'];
-            model.setParamFloat('PARAM_EYE_L_OPEN', exp.eye);
-            model.setParamFloat('PARAM_EYE_R_OPEN', exp.eye);
+            
+            // Apply eye scale
+            if (parameterIds.eyeLOpen) {{
+                model.setParameterValueById(parameterIds.eyeLOpen, exp.eyeScale);
+            }}
+            if (parameterIds.eyeROpen) {{
+                model.setParameterValueById(parameterIds.eyeROpen, exp.eyeScale);
+            }}
+            
+            // Apply mouth
+            if (parameterIds.mouthOpen) {{
+                model.setParameterValueById(parameterIds.mouthOpen, exp.mouthY);
+            }}
         }};
         
         window.setMouthOpen = function(value) {{
-            mouthOpen = value;
+            targetMouthOpen = Math.max(0, Math.min(1, value));
         }};
         
         window.setModelAngle = function(x, y, z) {{
-            if (!model) return;
-            model.setParamFloat('PARAM_ANGLE_X', x);
-            model.setParamFloat('PARAM_ANGLE_Y', y);
-            model.setParamFloat('PARAM_ANGLE_Z', z);
+            if (!model || !isModelLoaded) return;
+            setParameterValue('angleX', x);
+            setParameterValue('angleY', y);
+            setParameterValue('angleZ', z);
         }};
         
-        // Auto-start
+        window.isModelReady = function() {{
+            return isModelLoaded;
+        }};
+        
+        // Auto-start initialization
         waitForLibraries();
     </script>
 </body>
