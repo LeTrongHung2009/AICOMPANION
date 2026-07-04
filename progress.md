@@ -374,6 +374,8 @@ xdotool>=3.20210415      # NEW cho desktop control
 2. **Thiếu QApplication**: Không khởi tạo QApplication trước khi tạo widget
 3. **Render method cũ**: Dùng placeholder QLabel thay vì render thực tế
 4. **Không có WebEngine**: PyQt6 cần QWebEngineView để render WebGL content
+5. **Model path không đúng**: Đường dẫn model không được kiểm tra kỹ
+6. **JS library loading**: Thiếu thư viện Live2D widget phù hợp
 
 ### Giải pháp đã implement (v2.1):
 
@@ -383,6 +385,8 @@ xdotool>=3.20210415      # NEW cho desktop control
 - **HTML generator**: Tự động sinh HTML với Live2D Cubism SDK từ CDN
 - **Transparent background**: WA_TranslucentBackground cho cả window và web view
 - **Python ↔ JS Bridge**: Gọi hàm JS từ Python qua `runJavaScript()`
+- **Fallback paths**: Kiểm tra nhiều đường dẫn model khác nhau
+- **Enhanced logging**: Log chi tiết quá trình load model
 
 #### 2. Cập nhật `main_live2d.py`
 ```python
@@ -438,8 +442,33 @@ assets/models/kira_live2d/
 ### Files đã cập nhật:
 | File | Thay đổi |
 |------|----------|
-| `companion/desktop/live2d_overlay.py` | Viết lại hoàn toàn dùng QWebEngineView |
+| `companion/desktop/live2d_overlay.py` | Viết lại hoàn toàn dùng QWebEngineView, thêm fallback paths, enhanced logging |
 | `main_live2d.py` | Thêm QApplication, sửa class name |
 | `LIVE2D_MODEL_IMPORT_GUIDE.md` | Hướng dẫn import model mới |
 | `progress.md` | Thêm section bugfix v2.1 |
+
+### Các bước debug khi Live2D không hiển thị:
+
+1. **Kiểm tra model directory:**
+```bash
+ls -la assets/models/kira_live2d/
+```
+
+2. **Kiểm tra file model.json:**
+```bash
+cat assets/models/kira_live2d/model.json
+```
+
+3. **Chạy với debug logging:**
+```bash
+python -c "import logging; logging.basicConfig(level=logging.DEBUG)"
+python main_live2d.py
+```
+
+4. **Kiểm tra JS console logs:**
+- Logs sẽ xuất hiện trong terminal với prefix `[JS INFO]`, `[JS ERROR]`, etc.
+- Tìm các lỗi về WebGL, CORS, hoặc missing files
+
+5. **Test với placeholder:**
+- Nếu model không load được, sẽ hiển thị placeholder với thông báo lỗi cụ thể
 

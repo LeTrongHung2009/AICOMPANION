@@ -1,0 +1,23 @@
+{
+    "type": "Live2D Model Setting",
+    "name": "kira",
+    "model": "miku.moc3",
+    "textures": [
+        "miku_ja/texture_00.png",
+        "miku_ja/texture_01.png",
+        "miku_ja/texture_02.png"
+    ],
+    "physics": "miku.physics3.json",
+    "pose": "",
+    "expressions": [],
+    "lip_sync": true,
+    "hit_areas": [
+        {"name": "Head", "id": "HitArea"},
+        {"name": "Body", "id": "HitArea"}
+    ],
+    "motions": {
+        "idle": [
+            {"file": "motions/miku_m01.motion3.json", "fade_in_time": 500, "fade_out_time": 500}
+        ]
+    }
+}
