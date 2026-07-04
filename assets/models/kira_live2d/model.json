@@ -1,23 +1,35 @@
 {
     "type": "Live2D Model Setting",
     "name": "kira",
-    "model": "miku.moc3",
+    "model": "kira.moc3",
     "textures": [
-        "miku_ja/texture_00.png",
-        "miku_ja/texture_01.png",
-        "miku_ja/texture_02.png"
+        "kira/texture_00.png",
+        "kira/texture_01.png",
+        "kira/texture_02.png"
     ],
-    "physics": "miku.physics3.json",
+    "physics": "kira.physics3.json",
     "pose": "",
-    "expressions": [],
+    "expressions": [
+        {"name": "neutral", "file": "expressions/neutral.exp3.json"},
+        {"name": "happy", "file": "expressions/happy.exp3.json"},
+        {"name": "sad", "file": "expressions/sad.exp3.json"},
+        {"name": "angry", "file": "expressions/angry.exp3.json"},
+        {"name": "surprised", "file": "expressions/surprised.exp3.json"}
+    ],
     "lip_sync": true,
     "hit_areas": [
-        {"name": "Head", "id": "HitArea"},
-        {"name": "Body", "id": "HitArea"}
+        {"name": "Head", "id": "HitAreaHead"},
+        {"name": "Body", "id": "HitAreaBody"}
     ],
     "motions": {
         "idle": [
-            {"file": "motions/miku_m01.motion3.json", "fade_in_time": 500, "fade_out_time": 500}
+            {"file": "motions/idle.motion3.json", "fade_in_time": 500, "fade_out_time": 500}
+        ],
+        "tap_head": [
+            {"file": "motions/tap_head.motion3.json", "fade_in_time": 300, "fade_out_time": 300}
+        ],
+        "tap_body": [
+            {"file": "motions/tap_body.motion3.json", "fade_in_time": 300, "fade_out_time": 300}
         ]
     }
 }

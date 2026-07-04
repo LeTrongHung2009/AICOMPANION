@@ -1,0 +1,14 @@
+{
+    "Type": "Live2D Motion",
+    "Meta": {
+        "Duration": 1.0,
+        "Fps": 30.0,
+        "Loop": false,
+        "AreExpressionSamples": false
+    },
+    "Curves": [
+        {"Target": "Parameter", "Id": "ParamBodyAngleX", "Values": [0, 0.15, 0]},
+        {"Target": "Parameter", "Id": "ParamBodyAngleY", "Values": [0, -0.1, 0]},
+        {"Target": "Parameter", "Id": "ParamBreath", "Values": [0.5, 0.7, 0.5]}
+    ]
+}

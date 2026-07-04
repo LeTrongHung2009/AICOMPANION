@@ -268,10 +268,7 @@ class Live2DOverlay(QWidget):
     <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
     
     <!-- PIXI.js (Required for rendering) -->
-    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/browser/pixi.min.js"></script>
-    
-    <!-- Live2D Cubism 4 SDK for Web -->
-    <script src="https://cdn.jsdelivr.net/npm/live2d-cubism-sdk-for-web@4.0.0/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/browser/pixi.min.js"></script>
     
     <!-- pixi-live2d-display wrapper (easier API) -->
     <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
@@ -305,7 +302,12 @@ class Live2DOverlay(QWidget):
                 setTimeout(waitForLibraries, 100);
                 return;
             }}
-            console.log('[Live2D] Libraries loaded, initializing...');
+            if (!PIXI.live2d || !PIXI.live2d.Live2DModel) {{
+                console.log('[Live2D] Waiting for pixi-live2d-display...');
+                setTimeout(waitForLibraries, 100);
+                return;
+            }}
+            console.log('[Live2D] All libraries loaded, initializing...');
             initializeLive2D();
         }}
         
@@ -328,7 +330,9 @@ class Live2DOverlay(QWidget):
                     backgroundAlpha: 0,
                     autoStart: true,
                     resolution: window.devicePixelRatio || 1,
-                    autoDensity: true
+                    autoDensity: true,
+                    antialias: true,
+                    preserveDrawingBuffer: true
                 }});
                 
                 console.log('[Live2D] PIXI application created');
@@ -336,11 +340,6 @@ class Live2DOverlay(QWidget):
                 console.log('[Live2D] Cubism core available:', typeof Live2DCubismCore !== 'undefined' || typeof cubismCore !== 'undefined');
                 
                 document.getElementById('loading').textContent = 'Loading model from {model_json_path}...';
-                
-                // Check if pixi-live2d-display is available
-                if (!window.Live2DModel || !PIXI.live2d) {{
-                    throw new Error('pixi-live2d-display library not loaded');
-                }}
                 
                 // Load model using pixi-live2d-display
                 const modelUrl = '{model_dir_url}{model_json_path}';
