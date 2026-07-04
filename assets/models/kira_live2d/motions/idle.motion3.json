@@ -1,0 +1,19 @@
+{
+    "Type": "Live2D Motion",
+    "Meta": {
+        "Duration": 2.0,
+        "Fps": 30.0,
+        "Loop": true,
+        "AreExpressionSamples": false
+    },
+    "Curves": [
+        {"Target": "Parameter", "Id": "ParamAngleX", "Values": [0, 0.1, 0, -0.1, 0]},
+        {"Target": "Parameter", "Id": "ParamAngleY", "Values": [0, 0.05, 0, -0.05, 0]},
+        {"Target": "Parameter", "Id": "ParamAngleZ", "Values": [0, 0.03, 0, -0.03, 0]},
+        {"Target": "Parameter", "Id": "ParamBodyAngleX", "Values": [0, 0.02, 0, -0.02, 0]},
+        {"Target": "Parameter", "Id": "ParamBodyAngleY", "Values": [0, 0.01, 0, -0.01, 0]},
+        {"Target": "Parameter", "Id": "ParamBreath", "Values": [0.5, 0.6, 0.5, 0.4, 0.5]},
+        {"Target": "Parameter", "Id": "ParamEyeLOpen", "Values": [1, 0.95, 1, 0.98, 1]},
+        {"Target": "Parameter", "Id": "ParamEyeROpen", "Values": [1, 0.95, 1, 0.98, 1]}
+    ]
+}
