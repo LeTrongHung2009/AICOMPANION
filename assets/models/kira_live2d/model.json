@@ -1,35 +1,78 @@
 {
-    "type": "Live2D Model Setting",
-    "name": "kira",
-    "model": "kira.moc3",
-    "textures": [
-        "kira/texture_00.png",
-        "kira/texture_01.png",
-        "kira/texture_02.png"
-    ],
-    "physics": "kira.physics3.json",
-    "pose": "",
-    "expressions": [
-        {"name": "neutral", "file": "expressions/neutral.exp3.json"},
-        {"name": "happy", "file": "expressions/happy.exp3.json"},
-        {"name": "sad", "file": "expressions/sad.exp3.json"},
-        {"name": "angry", "file": "expressions/angry.exp3.json"},
-        {"name": "surprised", "file": "expressions/surprised.exp3.json"}
-    ],
-    "lip_sync": true,
-    "hit_areas": [
-        {"name": "Head", "id": "HitAreaHead"},
-        {"name": "Body", "id": "HitAreaBody"}
-    ],
-    "motions": {
-        "idle": [
-            {"file": "motions/idle.motion3.json", "fade_in_time": 500, "fade_out_time": 500}
+    "Version": 3,
+    "FileReferences": {
+        "Moc": "kira.moc3",
+        "Textures": [
+            "kira/texture_00.png",
+            "kira/texture_01.png",
+            "kira/texture_02.png"
         ],
-        "tap_head": [
-            {"file": "motions/tap_head.motion3.json", "fade_in_time": 300, "fade_out_time": 300}
+        "Physics": "kira.physics3.json",
+        "Expressions": [
+            {
+                "Name": "neutral",
+                "File": "expressions/neutral.exp3.json"
+            },
+            {
+                "Name": "happy",
+                "File": "expressions/happy.exp3.json"
+            },
+            {
+                "Name": "sad",
+                "File": "expressions/sad.exp3.json"
+            },
+            {
+                "Name": "angry",
+                "File": "expressions/angry.exp3.json"
+            },
+            {
+                "Name": "surprised",
+                "File": "expressions/surprised.exp3.json"
+            }
         ],
-        "tap_body": [
-            {"file": "motions/tap_body.motion3.json", "fade_in_time": 300, "fade_out_time": 300}
-        ]
-    }
+        "Motions": {
+            "Idle": [
+                {
+                    "File": "motions/idle.motion3.json"
+                }
+            ],
+            "TapHead": [
+                {
+                    "File": "motions/tap_head.motion3.json"
+                }
+            ],
+            "TapBody": [
+                {
+                    "File": "motions/tap_body.motion3.json"
+                }
+            ]
+        }
+    },
+    "Groups": [
+        {
+            "Target": "Parameter",
+            "Name": "LipSync",
+            "Ids": [
+                "PARAM_MOUTH_OPEN_Y"
+            ]
+        },
+        {
+            "Target": "Parameter",
+            "Name": "EyeBlink",
+            "Ids": [
+                "PARAM_EYE_L_OPEN",
+                "PARAM_EYE_R_OPEN"
+            ]
+        }
+    ],
+    "HitAreas": [
+        {
+            "Id": "HitAreaHead",
+            "Name": "Head"
+        },
+        {
+            "Id": "HitAreaBody",
+            "Name": "Body"
+        }
+    ]
 }
