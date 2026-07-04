@@ -219,10 +219,17 @@ mkdir -p assets/models/kira_live2d
 
 # Cấu trúc thư mục mong đợi:
 # assets/models/kira_live2d/
-# ├── model.json (hoặc .model3.json)
-# ├── textures/
-# ├── motions/
-# └── physics.json
+# ├── model.json (hoặc .model3.json) - BẮT BUỘC
+# ├── *.moc3 - File model binary - BẮT BUỘC
+# ├── textures/ - Thư mục texture PNG - BẮT BUỘC
+# │   └── texture_00.png
+# ├── motions/ - Tùy chọn - Animation
+# │   └── idle.mtn3
+# └── physics.json - Tùy chọn - Physics settings
+
+# Kiểm tra model đã tải:
+ls -la assets/models/kira_live2d/
+cat assets/models/kira_live2d/model.json
 ```
 
 ### 4. Cấu hình Biến môi trường

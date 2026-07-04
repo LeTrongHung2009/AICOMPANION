@@ -41,13 +41,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-class VisionConfig(BaseSettings):  # Hoặc BaseModel tùy cách bạn viết
-    # ... các dòng code hiện có của bạn ...
-    
-    # Thêm hai dòng này vào:
-    max_width: int = 1920
-    max_height: int = 1080
-    
+# Remove the errant VisionConfig class fragment - it should be in config.py
 class AsyncioOrchestrator:
     """
     Main system coordinator running on single asyncio loop.

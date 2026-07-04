@@ -23,8 +23,15 @@ from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 
 logger = logging.getLogger(__name__)
 
-# Model path configuration
+# Model path configuration - Use absolute path from project root
 MODEL_DIR = Path(__file__).parent.parent.parent / "assets" / "models" / "kira_live2d"
+
+# Fallback paths to check
+FALLBACK_MODEL_PATHS = [
+    Path(__file__).parent.parent.parent / "assets" / "models" / "kira_live2d",
+    Path.home() / ".kira_companion" / "models" / "kira_live2d",
+    Path("/usr/share/kira/models"),
+]
 
 
 class Live2DWebPage(QWebEnginePage):
@@ -64,12 +71,31 @@ class Live2DOverlay(QWidget):
     ) -> None:
         super().__init__()
         
-        self.model_path = model_path or MODEL_DIR
+        # Try provided path first, then fallback paths
+        if model_path:
+            self.model_path = model_path
+        else:
+            self.model_path = MODEL_DIR
+            # Check fallback paths if main path doesn't exist
+            if not self.model_path.exists():
+                for fallback in FALLBACK_MODEL_PATHS[1:]:  # Skip first since it's the same as MODEL_DIR
+                    if fallback.exists():
+                        logger.info(f"Using fallback model path: {fallback}")
+                        self.model_path = fallback
+                        break
+        
         self.scale = scale
         self.current_expression = "neutral"
         self.is_talking = False
         self.mouth_open_value = 0.0
         self._model_loaded = False
+        
+        # Debug: Log model path info
+        logger.info(f"Live2DOverlay initializing with model_path: {self.model_path}")
+        logger.info(f"Model path exists: {self.model_path.exists()}")
+        if self.model_path.exists():
+            files = list(self.model_path.iterdir())
+            logger.info(f"Model directory contents: {[f.name for f in files]}")
         
         # Setup window properties
         self._setup_window(initial_x, initial_y)
@@ -136,30 +162,37 @@ class Live2DOverlay(QWidget):
         """Load Live2D model from disk and render via WebEngine."""
         if not self.model_path.exists():
             logger.warning(f"Live2D model directory not found: {self.model_path}")
-            self._show_placeholder("Model directory not found")
+            logger.warning("Please download model from: https://booth.pm/jp/items/4711410")
+            logger.warning(f"Expected path: {self.model_path}")
+            self._show_placeholder("Model directory not found\nDownload from booth.pm/jp/items/4711410")
             return
         
         # Check for model.json file
         model_file = self.model_path / "model.json"
         if not model_file.exists():
             logger.warning(f"model.json not found in {self.model_path}")
-            self._show_placeholder("model.json not found")
+            logger.warning(f"Files in directory: {[f.name for f in self.model_path.iterdir()]}")
+            self._show_placeholder("model.json not found\nCheck assets/models/kira_live2d/")
             return
         
         try:
             # Generate HTML content for Live2D rendering
             html_content = self._generate_live2d_html(model_file)
             
-            # Load HTML into WebEngine
-            self.web_view.setHtml(html_content, QUrl.fromLocalFile(str(self.model_path)))
+            # Load HTML into WebEngine with proper base URL for local file access
+            base_url = QUrl.fromLocalFile(str(self.model_path.absolute()))
+            logger.info(f"Loading HTML with base URL: {base_url}")
+            logger.info(f"Model file path: {model_file}")
             
-            logger.info(f"Live2D model loaded: {model_file}")
+            self.web_view.setHtml(html_content, base_url)
+            
+            logger.info(f"Live2D model HTML loaded: {model_file}")
             self._model_loaded = True
             self.model_loaded.emit(True)
             
         except Exception as e:
-            logger.error(f"Failed to load Live2D model: {e}")
-            self._show_placeholder(f"Error: {str(e)}")
+            logger.error(f"Failed to load Live2D model: {e}", exc_info=True)
+            self._show_placeholder(f"Error loading model:\n{str(e)}")
             self._model_loaded = False
             self.model_loaded.emit(False)
     
@@ -167,6 +200,9 @@ class Live2DOverlay(QWidget):
         """Generate HTML page with Live2D Cubism SDK."""
         # Convert Path to string for JSON
         model_json_path = str(model_file.name)
+        
+        # Get absolute path for base URL
+        model_dir_url = QUrl.fromLocalFile(str(self.model_path.absolute())).toString()
         
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -218,151 +254,119 @@ class Live2DOverlay(QWidget):
     <!-- Live2D Cubism Core -->
     <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
     
-    <!-- Live2D Cubism SDK -->
-    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    <!-- Live2D Cubism SDK (using pixi-live2d-display which is more reliable) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js/dist/browser/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/live2d-widget@0.9.6/lib/Live2dWidget.min.js"></script>
     
     <script>
+        console.log('[Live2D] Starting initialization...');
+        console.log('[Live2D] Model directory: {model_dir_url}');
+        console.log('[Live2D] Model file: {model_json_path}');
+        
         // Wait for libraries to load
         function waitForLibraries() {{
-            if (typeof live2d === 'undefined' || typeof Live2DCubismCore === 'undefined') {{
+            if (typeof PIXI === 'undefined') {{
+                console.log('[Live2D] Waiting for PIXI...');
                 setTimeout(waitForLibraries, 100);
                 return;
             }}
+            console.log('[Live2D] Libraries loaded, initializing...');
             initializeLive2D();
         }}
         
+        let app = null;
         let model = null;
-        let canvas = null;
-        let gl = null;
         
-        function initializeLive2D() {{
-            document.getElementById('loading').style.display = 'none';
-            
-            canvas = document.getElementById('live2d');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            gl = canvas.getContext('webgl');
-            if (!gl) {{
-                console.error('WebGL not supported');
-                document.getElementById('loading').textContent = 'WebGL not supported';
-                document.getElementById('loading').style.display = 'block';
-                return;
-            }}
-            
-            // Enable transparency
-            gl.clearColor(0.0, 0.0, 0.0, 0.0);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            
-            // Load model
-            loadModel('{model_json_path}');
-        }}
-        
-        function loadModel(modelPath) {{
-            const request = new XMLHttpRequest();
-            request.open('GET', modelPath);
-            request.responseType = 'json';
-            
-            request.onload = function() {{
-                if (request.status >= 400) {{
-                    console.error('Failed to load model:', request.status);
-                    document.getElementById('loading').textContent = 'Failed to load model';
-                    document.getElementById('loading').style.display = 'block';
-                    return;
-                }}
-                
-                const modelData = request.response;
-                createModel(modelData);
-            }};
-            
-            request.onerror = function() {{
-                console.error('Network error loading model');
-                document.getElementById('loading').textContent = 'Network error';
-                document.getElementById('loading').style.display = 'block';
-            }};
-            
-            request.send();
-        }}
-        
-        function createModel(modelData) {{
+        async function initializeLive2D() {{
             try {{
-                model = live2d.Live2DModel();
-                model.loadModel(modelData);
-                model.saveContext();
+                document.getElementById('loading').textContent = 'Initializing WebGL...';
                 
-                // Set initial expression
-                model.setParamFloat('PARAM_ANGLE_X', 0);
-                model.setParamFloat('PARAM_ANGLE_Y', 0);
-                model.setParamFloat('PARAM_ANGLE_Z', 0);
-                model.setParamFloat('PARAM_BODY_ANGLE_X', 0);
-                model.setParamFloat('PARAM_BODY_ANGLE_Y', 0);
+                const canvas = document.getElementById('live2d');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
                 
-                console.log('Live2D model created successfully');
+                // Create PIXI application
+                app = new PIXI.Application({{
+                    view: canvas,
+                    width: canvas.width,
+                    height: canvas.height,
+                    transparent: true,
+                    backgroundColor: 0x00000000,
+                    backgroundAlpha: 0
+                }});
                 
-                // Start render loop
-                render();
+                console.log('[Live2D] PIXI application created');
+                document.getElementById('loading').textContent = 'Loading model...';
+                
+                // Load Live2D model using widget
+                if (window.Live2DWidget) {{
+                    model = await window.Live2DWidget.load('{model_dir_url}{model_json_path}', {{
+                        container: canvas,
+                        width: 400,
+                        height: 600,
+                        draggable: false,
+                        reactivateOn: 'mouseover'
+                    }});
+                    console.log('[Live2D] Model loaded successfully');
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // Setup expression functions
+                    setupFunctions();
+                }} else {{
+                    throw new Error('Live2DWidget not available');
+                }}
             }} catch (e) {{
-                console.error('Failed to create model:', e);
-                document.getElementById('loading').textContent = 'Model creation error: ' + e.message;
+                console.error('[Live2D] Error:', e);
+                document.getElementById('loading').textContent = 'Error: ' + e.message;
                 document.getElementById('loading').style.display = 'block';
             }}
         }}
         
-        let mouthOpen = 0.0;
-        let time = 0;
-        
-        function render() {{
-            if (!model) return;
-            
-            time += 0.016; // ~60fps
-            
-            // Breathing animation
-            const breath = Math.sin(time * 2) * 0.1;
-            model.setParamFloat('PARAM_BREATH', breath);
-            
-            // Blink animation (every 3-5 seconds)
-            const blink = Math.abs(Math.sin(time * 0.5)) > 0.95 ? 1 : 0;
-            model.setParamFloat('PARAM_EYE_L_OPEN', 1 - blink);
-            model.setParamFloat('PARAM_EYE_R_OPEN', 1 - blink);
-            
-            // Apply mouth openness for lip-sync
-            model.setParamFloat('PARAM_MOUTH_OPEN_Y', mouthOpen);
-            
-            model.update();
-            model.draw();
-            
-            requestAnimationFrame(render);
-        }}
-        
-        // Expose functions for Python to call
-        window.setExpression = function(expr) {{
-            if (!model) return;
-            console.log('Setting expression:', expr);
-            // Map expressions to parameters
-            const expressions = {{
-                'neutral': {{ eye: 1, mouth: 0 }},
-                'happy': {{ eye: 1.2, mouth: 0.3 }},
-                'sad': {{ eye: 0.8, mouth: -0.2 }},
-                'angry': {{ eye: 0.9, mouth: -0.1 }},
-                'surprised': {{ eye: 1.5, mouth: 0.5 }},
-                'blush': {{ eye: 1, mouth: 0.1 }}
+        function setupFunctions() {{
+            // Expose functions for Python to call
+            window.setExpression = function(expr) {{
+                console.log('[Live2D] Setting expression:', expr);
+                if (model && model.internalModel) {{
+                    const core = model.internalModel.coreModel;
+                    // Set basic parameters based on expression
+                    const expressions = {{
+                        'neutral': {{ eye: 1, mouth: 0 }},
+                        'happy': {{ eye: 1.2, mouth: 0.3 }},
+                        'sad': {{ eye: 0.8, mouth: -0.2 }},
+                        'angry': {{ eye: 0.9, mouth: -0.1 }},
+                        'surprised': {{ eye: 1.5, mouth: 0.5 }},
+                        'blush': {{ eye: 1, mouth: 0.1 }}
+                    }};
+                    const exp = expressions[expr] || expressions['neutral'];
+                    if (core.setParameterValue) {{
+                        core.setParameterValue('ParamEyeLOpen', exp.eye);
+                        core.setParameterValue('ParamEyeROpen', exp.eye);
+                    }}
+                }}
             }};
-            const exp = expressions[expr] || expressions['neutral'];
-            model.setParamFloat('PARAM_EYE_L_OPEN', exp.eye);
-            model.setParamFloat('PARAM_EYE_R_OPEN', exp.eye);
-        }};
-        
-        window.setMouthOpen = function(value) {{
-            mouthOpen = value;
-        }};
-        
-        window.setModelAngle = function(x, y, z) {{
-            if (!model) return;
-            model.setParamFloat('PARAM_ANGLE_X', x);
-            model.setParamFloat('PARAM_ANGLE_Y', y);
-            model.setParamFloat('PARAM_ANGLE_Z', z);
-        }};
+            
+            window.setMouthOpen = function(value) {{
+                if (model && model.internalModel && model.internalModel.coreModel) {{
+                    const core = model.internalModel.coreModel;
+                    if (core.setParameterValue) {{
+                        core.setParameterValue('ParamMouthOpenY', value);
+                    }}
+                }}
+            }};
+            
+            window.setModelAngle = function(x, y, z) {{
+                if (model && model.internalModel && model.internalModel.coreModel) {{
+                    const core = model.internalModel.coreModel;
+                    if (core.setParameterValue) {{
+                        core.setParameterValue('ParamAngleX', x);
+                        core.setParameterValue('ParamAngleY', y);
+                        core.setParameterValue('ParamAngleZ', z);
+                    }}
+                }}
+            }};
+            
+            console.log('[Live2D] Functions exposed');
+        }}
         
         // Auto-start
         waitForLibraries();
