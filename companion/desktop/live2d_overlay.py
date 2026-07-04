@@ -243,6 +243,18 @@ class Live2DOverlay(QWidget):
             font-size: 18px;
             text-align: center;
         }}
+        #error-message {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            text-align: center;
+            max-width: 80%;
+            display: none;
+        }}
     </style>
 </head>
 <body>
@@ -250,23 +262,46 @@ class Live2DOverlay(QWidget):
         <canvas id="live2d"></canvas>
     </div>
     <div id="loading">Loading KIRA...</div>
+    <div id="error-message"></div>
     
-    <!-- Live2D Cubism Core -->
+    <!-- Live2D Cubism Core (REQUIRED - must load first) -->
     <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
     
-    <!-- Live2D Cubism SDK (using pixi-live2d-display which is more reliable) -->
-    <script src="https://cdn.jsdelivr.net/npm/pixi.js/dist/browser/pixi.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/live2d-widget@0.9.6/lib/Live2dWidget.min.js"></script>
+    <!-- PIXI.js (Required for rendering) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/browser/pixi.min.js"></script>
+    
+    <!-- Live2D Cubism 4 SDK for Web -->
+    <script src="https://cdn.jsdelivr.net/npm/live2d-cubism-sdk-for-web@4.0.0/core.min.js"></script>
+    
+    <!-- pixi-live2d-display wrapper (easier API) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
     
     <script>
         console.log('[Live2D] Starting initialization...');
-        console.log('[Live2D] Model directory: {model_dir_url}');
-        console.log('[Live2D] Model file: {model_json_path}');
+        console.log('[Live2D] Model directory:', '{model_dir_url}');
+        console.log('[Live2D] Model file:', '{model_json_path}');
         
-        // Wait for libraries to load
+        let app = null;
+        let currentModel = null;
+        
+        // Show error helper
+        function showError(msg) {{
+            const el = document.getElementById('error-message');
+            el.textContent = 'Error: ' + msg;
+            el.style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            console.error('[Live2D]', msg);
+        }}
+        
+        // Wait for all libraries to load
         function waitForLibraries() {{
             if (typeof PIXI === 'undefined') {{
                 console.log('[Live2D] Waiting for PIXI...');
+                setTimeout(waitForLibraries, 100);
+                return;
+            }}
+            if (typeof Live2DCubismCore === 'undefined' && typeof cubismCore === 'undefined') {{
+                console.log('[Live2D] Waiting for Cubism Core...');
                 setTimeout(waitForLibraries, 100);
                 return;
             }}
@@ -274,102 +309,214 @@ class Live2DOverlay(QWidget):
             initializeLive2D();
         }}
         
-        let app = null;
-        let model = null;
-        
         async function initializeLive2D() {{
             try {{
-                document.getElementById('loading').textContent = 'Initializing WebGL...';
-                
                 const canvas = document.getElementById('live2d');
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
                 
-                // Create PIXI application
+                console.log('[Live2D] Canvas size:', canvas.width, 'x', canvas.height);
+                document.getElementById('loading').textContent = 'Initializing WebGL...';
+                
+                // Create PIXI Application with transparent background
                 app = new PIXI.Application({{
                     view: canvas,
                     width: canvas.width,
                     height: canvas.height,
                     transparent: true,
                     backgroundColor: 0x00000000,
-                    backgroundAlpha: 0
+                    backgroundAlpha: 0,
+                    autoStart: true,
+                    resolution: window.devicePixelRatio || 1,
+                    autoDensity: true
                 }});
                 
                 console.log('[Live2D] PIXI application created');
-                document.getElementById('loading').textContent = 'Loading model...';
+                console.log('[Live2D] PIXI version:', PIXI.VERSION);
+                console.log('[Live2D] Cubism core available:', typeof Live2DCubismCore !== 'undefined' || typeof cubismCore !== 'undefined');
                 
-                // Load Live2D model using widget
-                if (window.Live2DWidget) {{
-                    model = await window.Live2DWidget.load('{model_dir_url}{model_json_path}', {{
-                        container: canvas,
-                        width: 400,
-                        height: 600,
-                        draggable: false,
-                        reactivateOn: 'mouseover'
-                    }});
-                    console.log('[Live2D] Model loaded successfully');
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    // Setup expression functions
-                    setupFunctions();
-                }} else {{
-                    throw new Error('Live2DWidget not available');
+                document.getElementById('loading').textContent = 'Loading model from {model_json_path}...';
+                
+                // Check if pixi-live2d-display is available
+                if (!window.Live2DModel || !PIXI.live2d) {{
+                    throw new Error('pixi-live2d-display library not loaded');
                 }}
+                
+                // Load model using pixi-live2d-display
+                const modelUrl = '{model_dir_url}{model_json_path}';
+                console.log('[Live2D] Loading model from:', modelUrl);
+                
+                currentModel = await PIXI.live2d.Live2DModel.from(modelUrl, {{
+                    autoInteract: false,
+                    draggable: false,
+                    hitAreaScale: 1.0,
+                    mouseTracking: false,
+                    autoFocus: false
+                }});
+                
+                console.log('[Live2D] Model loaded successfully!');
+                console.log('[Live2D] Model internal:', currentModel.internalModel);
+                
+                // Add model to stage
+                app.stage.addChild(currentModel);
+                
+                // Center and scale model
+                const scaleX = (app.screen.width * 0.8) / currentModel.width;
+                const scaleY = (app.screen.height * 0.8) / currentModel.height;
+                const scale = Math.min(scaleX, scaleY);
+                
+                currentModel.scale.set(scale);
+                currentModel.x = (app.screen.width - currentModel.width) / 2;
+                currentModel.y = (app.screen.height - currentModel.height) / 2;
+                
+                console.log('[Live2D] Model positioned at:', currentModel.x, currentModel.y, 'scale:', scale);
+                
+                // Hide loading message
+                document.getElementById('loading').style.display = 'none';
+                
+                // Setup expression functions
+                setupFunctions();
+                
             }} catch (e) {{
-                console.error('[Live2D] Error:', e);
-                document.getElementById('loading').textContent = 'Error: ' + e.message;
-                document.getElementById('loading').style.display = 'block';
+                console.error('[Live2D] Initialization error:', e);
+                console.error('[Live2D] Stack:', e.stack);
+                showError(e.message || 'Unknown error loading model');
             }}
         }}
         
         function setupFunctions() {{
+            console.log('[Live2D] Setting up control functions...');
+            
             // Expose functions for Python to call
             window.setExpression = function(expr) {{
                 console.log('[Live2D] Setting expression:', expr);
-                if (model && model.internalModel) {{
-                    const core = model.internalModel.coreModel;
-                    // Set basic parameters based on expression
-                    const expressions = {{
-                        'neutral': {{ eye: 1, mouth: 0 }},
-                        'happy': {{ eye: 1.2, mouth: 0.3 }},
-                        'sad': {{ eye: 0.8, mouth: -0.2 }},
-                        'angry': {{ eye: 0.9, mouth: -0.1 }},
-                        'surprised': {{ eye: 1.5, mouth: 0.5 }},
-                        'blush': {{ eye: 1, mouth: 0.1 }}
+                if (!currentModel || !currentModel.internalModel) {{
+                    console.warn('[Live2D] Model not ready');
+                    return;
+                }}
+                
+                const coreModel = currentModel.internalModel.coreModel;
+                if (!coreModel) {{
+                    console.warn('[Live2D] Core model not available');
+                    return;
+                }}
+                
+                // Set basic parameters based on expression
+                const expressions = {{
+                    'neutral': {{ eye: 1.0, mouth: 0.0, brow: 0.0 }},
+                    'happy': {{ eye: 1.2, mouth: 0.3, brow: 0.2 }},
+                    'sad': {{ eye: 0.8, mouth: -0.2, brow: -0.3 }},
+                    'angry': {{ eye: 0.9, mouth: -0.1, brow: -0.5 }},
+                    'surprised': {{ eye: 1.5, mouth: 0.5, brow: 0.4 }},
+                    'blush': {{ eye: 1.0, mouth: 0.1, brow: 0.1 }}
+                }};
+                
+                const exp = expressions[expr] || expressions['neutral'];
+                
+                try {{
+                    // Try different parameter names (Cubism 3 vs 4)
+                    const paramNames = {{
+                        eye: ['ParamEyeLOpen', 'PARAM_EYE_L_OPEN'],
+                        mouth: ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y'],
+                        brow: ['ParamBrowLY', 'PARAM_BROW_LY']
                     }};
-                    const exp = expressions[expr] || expressions['neutral'];
-                    if (core.setParameterValue) {{
-                        core.setParameterValue('ParamEyeLOpen', exp.eye);
-                        core.setParameterValue('ParamEyeROpen', exp.eye);
+                    
+                    for (const [key, value] of Object.entries(exp)) {{
+                        for (const paramName of paramNames[key]) {{
+                            if (coreModel.getParameterId) {{
+                                const id = coreModel.getParameterId(paramName);
+                                if (id !== undefined) {{
+                                    coreModel.setParameterValueById(id, value);
+                                    break;
+                                }}
+                            }} else if (coreModel.setParameterValue) {{
+                                coreModel.setParameterValue(paramName, value);
+                                break;
+                            }}
+                        }}
                     }}
+                    console.log('[Live2D] Expression set successfully');
+                }} catch (e) {{
+                    console.error('[Live2D] Error setting expression:', e);
                 }}
             }};
             
             window.setMouthOpen = function(value) {{
-                if (model && model.internalModel && model.internalModel.coreModel) {{
-                    const core = model.internalModel.coreModel;
-                    if (core.setParameterValue) {{
-                        core.setParameterValue('ParamMouthOpenY', value);
+                if (!currentModel || !currentModel.internalModel) return;
+                
+                const coreModel = currentModel.internalModel.coreModel;
+                if (!coreModel) return;
+                
+                try {{
+                    if (coreModel.getParameterId) {{
+                        const id = coreModel.getParameterId('ParamMouthOpenY');
+                        if (id !== undefined) {{
+                            coreModel.setParameterValueById(id, value);
+                        }}
+                    }} else if (coreModel.setParameterValue) {{
+                        coreModel.setParameterValue('ParamMouthOpenY', value);
                     }}
+                }} catch (e) {{
+                    console.error('[Live2D] Error setting mouth:', e);
                 }}
             }};
             
             window.setModelAngle = function(x, y, z) {{
-                if (model && model.internalModel && model.internalModel.coreModel) {{
-                    const core = model.internalModel.coreModel;
-                    if (core.setParameterValue) {{
-                        core.setParameterValue('ParamAngleX', x);
-                        core.setParameterValue('ParamAngleY', y);
-                        core.setParameterValue('ParamAngleZ', z);
+                if (!currentModel || !currentModel.internalModel) return;
+                
+                const coreModel = currentModel.internalModel.coreModel;
+                if (!coreModel) return;
+                
+                try {{
+                    const params = {{
+                        x: ['ParamAngleX', 'PARAM_ANGLE_X'],
+                        y: ['ParamAngleY', 'PARAM_ANGLE_Y'],
+                        z: ['ParamAngleZ', 'PARAM_ANGLE_Z']
+                    }};
+                    
+                    for (const [axis, value] of Object.entries({{x, y, z}})) {{
+                        for (const paramName of params[axis]) {{
+                            if (coreModel.getParameterId) {{
+                                const id = coreModel.getParameterId(paramName);
+                                if (id !== undefined) {{
+                                    coreModel.setParameterValueById(id, value);
+                                    break;
+                                }}
+                            }} else if (coreModel.setParameterValue) {{
+                                coreModel.setParameterValue(paramName, value);
+                                break;
+                            }}
+                        }}
                     }}
+                }} catch (e) {{
+                    console.error('[Live2D] Error setting angle:', e);
                 }}
             }};
             
-            console.log('[Live2D] Functions exposed');
+            console.log('[Live2D] Control functions ready');
         }}
         
-        // Auto-start
+        // Handle window resize
+        window.addEventListener('resize', () => {{
+            if (app) {{
+                app.renderer.resize(window.innerWidth, window.innerHeight);
+                if (currentModel) {{
+                    currentModel.x = (app.screen.width - currentModel.width) / 2;
+                    currentModel.y = (app.screen.height - currentModel.height) / 2;
+                }}
+            }}
+        }});
+        
+        // Auto-start initialization
+        console.log('[Live2D] Starting library detection...');
         waitForLibraries();
+        
+        // Timeout after 10 seconds
+        setTimeout(() => {{
+            if (!currentModel) {{
+                showError('Timeout: Model failed to load after 10s. Check network connection and model files.');
+            }}
+        }}, 10000);
     </script>
 </body>
 </html>"""
