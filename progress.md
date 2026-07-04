@@ -376,19 +376,41 @@ xdotool>=3.20210415      # NEW cho desktop control
 4. **Không có WebEngine**: PyQt6 cần QWebEngineView để render WebGL content
 5. **Model path không đúng**: Đường dẫn model không được kiểm tra kỹ
 6. **JS library loading**: Thiếu thư viện Live2D widget phù hợp
+7. **Live2DWidget không tồn tại**: Thư viện `live2d-widget@0.9.6` không còn hoạt động với Cubism 4
 
-### Giải pháp đã implement (v2.1):
+### Giải pháp đã implement (v2.1 - Cập nhật):
 
-#### 1. Viết lại `live2d_overlay.py` dùng PyQt6-WebEngine
+#### 1. Viết lại `live2d_overlay.py` dùng pixi-live2d-display
 - **QWebEngineView**: Render HTML/JS với WebGL support
 - **Custom QWebEnginePage**: Bắt JS console messages để debug
-- **HTML generator**: Tự động sinh HTML với Live2D Cubism SDK từ CDN
+- **HTML generator**: Tự động sinh HTML với các thư viện sau:
+  - Live2D Cubism Core (bắt buộc)
+  - PIXI.js v7.x (rendering engine)
+  - Live2D Cubism 4 SDK for Web
+  - pixi-live2d-display@0.4.0 (wrapper API dễ dùng)
 - **Transparent background**: WA_TranslucentBackground cho cả window và web view
 - **Python ↔ JS Bridge**: Gọi hàm JS từ Python qua `runJavaScript()`
 - **Fallback paths**: Kiểm tra nhiều đường dẫn model khác nhau
 - **Enhanced logging**: Log chi tiết quá trình load model
+- **Error display**: Hiển thị lỗi trực tiếp trên overlay nếu load thất bại
 
-#### 2. Cập nhật `main_live2d.py`
+#### 2. Cập nhật JavaScript initialization
+```javascript
+// Check libraries before init
+if (typeof PIXI === 'undefined') return;
+if (typeof Live2DCubismCore === 'undefined' && typeof cubismCore === 'undefined') return;
+
+// Load model with pixi-live2d-display
+currentModel = await PIXI.live2d.Live2DModel.from(modelUrl, {{
+    autoInteract: false,
+    draggable: false,
+    hitAreaScale: 1.0,
+    mouseTracking: false,
+    autoFocus: false
+}});
+```
+
+#### 3. Cập nhật `main_live2d.py`
 ```python
 from PyQt6.QtWidgets import QApplication
 from companion.desktop.live2d_overlay import Live2DOverlay
@@ -399,7 +421,7 @@ overlay.show()
 app.exec()
 ```
 
-#### 3. JavaScript API cho điều khiển model
+#### 4. JavaScript API cho điều khiển model
 ```javascript
 // Từ Python gọi JS
 web_view.page().runJavaScript("window.setExpression('happy')")
@@ -411,12 +433,12 @@ window.setMouthOpen(value)   // Lip-sync: 0.0-1.0
 window.setModelAngle(x,y,z)  // Xoay đầu model
 ```
 
-#### 4. Debug Console cho WebEngine
+#### 5. Debug Console cho WebEngine
 ```python
 class Live2DWebPage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
-        js_level = {0: "DEBUG", 1: "INFO", 2: "WARNING", 3: "ERROR"}.get(level, "LOG")
-        logger.debug(f"[JS {js_level}] {source_id}:{line_number} - {message}")
+        js_level = {{0: "DEBUG", 1: "INFO", 2: "WARNING", 3: "ERROR"}}.get(level, "LOG")
+        logger.debug(f"[JS {{js_level}}] {{source_id}}:{{line_number}} - {{message}}")
 ```
 
 ### Cách bật Debug Mode:
@@ -442,7 +464,7 @@ assets/models/kira_live2d/
 ### Files đã cập nhật:
 | File | Thay đổi |
 |------|----------|
-| `companion/desktop/live2d_overlay.py` | Viết lại hoàn toàn dùng QWebEngineView, thêm fallback paths, enhanced logging |
+| `companion/desktop/live2d_overlay.py` | Viết lại hoàn toàn dùng QWebEngineView, thay live2d-widget bằng pixi-live2d-display, thêm error handling, timeout detection, enhanced logging |
 | `main_live2d.py` | Thêm QApplication, sửa class name |
 | `LIVE2D_MODEL_IMPORT_GUIDE.md` | Hướng dẫn import model mới |
 | `progress.md` | Thêm section bugfix v2.1 |
@@ -468,7 +490,19 @@ python main_live2d.py
 4. **Kiểm tra JS console logs:**
 - Logs sẽ xuất hiện trong terminal với prefix `[JS INFO]`, `[JS ERROR]`, etc.
 - Tìm các lỗi về WebGL, CORS, hoặc missing files
+- Kiểm tra thông báo: `[Live2D] Libraries loaded`, `[Live2D] Model loaded successfully`
 
 5. **Test với placeholder:**
 - Nếu model không load được, sẽ hiển thị placeholder với thông báo lỗi cụ thể
+- Lỗi timeout sau 10s sẽ hiển thị rõ nguyên nhân
+
+6. **Kiểm tra network connection:**
+- CDN libraries cần internet để tải
+- Nếu offline, cần tải libraries về local
+
+### Lưu ý quan trọng:
+- **CDN Libraries**: Cần kết nối internet để tải PIXI.js và Live2D SDK từ CDN
+- **CORS Policy**: Local file access có thể bị chặn bởi browser security
+- **WebGL Support**: GPU phải hỗ trợ WebGL 2.0
+- **Model Version**: Model Booth #4711410 là Cubism 4, cần SDK tương thích
 
